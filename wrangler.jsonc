@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
 
-  "name": "REPLACE_WITH_EXISTING_WORKER_NAME",
+  "name": "onco-infusion-scan",
   "main": "src/worker.js",
   "compatibility_date": "2026-11-10",
 
@@ -14,8 +14,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "REPLACE_WITH_EXISTING_DATABASE_NAME",
-      "database_id": "REPLACE_WITH_EXISTING_DATABASE_ID",
+      "database_name": "onco-infusion-scan-db",
+      "database_id": "8f50ba56-4033-4444-9ed9-0dcef9ed2cd9",
       "migrations_dir": "migrations"
     }
   ]
