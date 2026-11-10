@@ -1,170 +1,211 @@
-// Frontend extraction only. Scan parsing and inventory behavior are unchanged.
-// Required bindings: DB (D1), ASSETS (static assets).
-// Required secrets: APP_USER, APP_PASSWORD (ASCII-only for this prototype).
-const json = (data, status = 200) => new Response(JSON.stringify(data), {
-  status, headers: { 'Content-Type': 'application/json; charset=utf-8',
-    'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }
-});
-function need(ok, message) { if (!ok) throw new Error(message); }
-async function digest(text) {
+// Oncology scanner prototype 0.2.0. Bindings: DB, ASSETS.
+// Secrets: APP_USER / APP_PASSWORD (ASCII). No patient data.
+// Optional SCAN_SEPARATOR: one deliberately configured printable FN1 substitute (e.g. |).
+const VERSION = 'prototype-0.2.0';
+class AppError extends Error {
+  constructor(message, code = 'VALIDATION', status = 400, details = {}) {
+    super(message); Object.assign(this, { code, status, details });
+  }
+}
+function requireValue(ok, message, code, status, details) {
+  if (!ok) throw new AppError(message, code, status, details);
+}
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), { status, headers: {
+    'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY' } });
+}
+async function hash(text) {
   return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))))
-    .map(x => x.toString(16).padStart(2, '0')).join('');
+    .map(v => v.toString(16).padStart(2, '0')).join('');
 }
 async function authorized(request, env) {
-  if (!env.APP_USER || !env.APP_PASSWORD) return false;
-  const expected = 'Basic ' + btoa(env.APP_USER + ':' + env.APP_PASSWORD);
-  return (await digest(request.headers.get('Authorization') || '')) === await digest(expected);
+  return (await hash(request.headers.get('Authorization') || '')) ===
+    await hash('Basic ' + btoa(env.APP_USER + ':' + env.APP_PASSWORD));
 }
-function parseScan(input) {
-  need(typeof input === 'string' && input.length <= 512, 'Scan must be text, at most 512 characters');
-  let remaining = input.replace(/[\r\n]+$/g, '');
-  if (remaining.startsWith(']d2')) remaining = remaining.slice(3);
-  const fields = {};
-  while (remaining.length) {
-    if (remaining[0] === '\x1d') { remaining = remaining.slice(1); continue; }
-    const ai = remaining.slice(0, 2); remaining = remaining.slice(2);
-    need(['01', '17', '10', '21'].includes(ai), 'Unsupported field or missing GS separator near AI ' + ai);
-    need(fields[ai] === undefined, 'Duplicate barcode field ' + ai);
+function parseScan(raw, substitute = '') {
+  requireValue(typeof raw === 'string' && raw.length > 0 && raw.length <= 512, 'Scan must contain 1-512 characters.');
+  let s = raw.replace(/[\r\n]+$/g, '');
+  if (s.startsWith(']d2')) s = s.slice(3);
+  // Explicit test notation; no inferred serial boundaries.
+  s = s.replace(/<GS>/g, '\x1d');
+  if (substitute) {
+    requireValue(substitute.length === 1 && /^[\x21-\x7e]$/.test(substitute), 'Invalid configured SCAN_SEPARATOR.');
+    s = s.split(substitute).join('\x1d');
+  }
+  const f = {};
+  while (s.length) {
+    if (s[0] === '\x1d') { s = s.slice(1); continue; }
+    const ai = s.slice(0, 2); s = s.slice(2);
+    requireValue(['01','17','10','21'].includes(ai), 'Unsupported AI or missing field separator near ' + ai, 'PARSE_ERROR');
+    requireValue(f[ai] === undefined, 'Duplicate AI ' + ai, 'PARSE_ERROR');
     if (ai === '01' || ai === '17') {
-      const length = ai === '01' ? 14 : 6;
-      need(new RegExp('^\\d{' + length + '}').test(remaining), 'Invalid fixed-length field ' + ai);
-      fields[ai] = remaining.slice(0, length); remaining = remaining.slice(length);
+      const n = ai === '01' ? 14 : 6;
+      requireValue(new RegExp('^\\d{' + n + '}').test(s), 'Invalid AI ' + ai, 'PARSE_ERROR');
+      f[ai] = s.slice(0,n); s = s.slice(n);
     } else {
-      const end = remaining.indexOf('\x1d');
-      fields[ai] = end < 0 ? remaining : remaining.slice(0, end);
-      remaining = end < 0 ? '' : remaining.slice(end + 1);
-      need(/^[\x21-\x7e]{1,20}$/.test(fields[ai]), 'Invalid lot/serial or missing GS separator');
+      const end = s.indexOf('\x1d'); f[ai] = end < 0 ? s : s.slice(0,end); s = end < 0 ? '' : s.slice(end+1);
+      requireValue(/^[\x21-\x7e]{1,20}$/.test(f[ai]),
+        'Missing GS separator or invalid lot/serial. A pasted test needs <GS> after a non-final variable-length field.', 'MISSING_SEPARATOR');
     }
   }
-  need(['01', '17', '10', '21'].every(k => fields[k]),
-    'Need GTIN, expiration, lot and serial. A GS separator may be missing after a variable-length field.');
-  let sum = 0;
-  for (let i = 0; i < 13; i++) sum += Number(fields['01'][i]) * (i % 2 === 0 ? 3 : 1);
-  need((10 - sum % 10) % 10 === Number(fields['01'][13]), 'GTIN check digit failed');
-  const year = 2000 + Number(fields['17'].slice(0, 2));
-  const month = Number(fields['17'].slice(2, 4));
-  let day = Number(fields['17'].slice(4, 6));
-  need(month >= 1 && month <= 12, 'Invalid expiration month');
-  const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  if (day === 0) day = last;
-  need(day >= 1 && day <= last, 'Invalid expiration day');
-  return { gtin: fields['01'], serial: fields['21'], lot: fields['10'],
-    expiration: [year, String(month).padStart(2, '0'), String(day).padStart(2, '0')].join('-') };
+  requireValue(['01','17','10','21'].every(k=>f[k]),
+    'Need GTIN, expiration, lot and serial. Check GS separators; the app will not guess serial boundaries.', 'MISSING_SEPARATOR');
+  let sum=0; for(let i=0;i<13;i++) sum+=Number(f['01'][i])*(i%2===0?3:1);
+  requireValue((10-sum%10)%10===Number(f['01'][13]), 'GTIN check digit failed.', 'PARSE_ERROR');
+  const year=2000+Number(f['17'].slice(0,2)), month=Number(f['17'].slice(2,4));
+  requireValue(month>=1 && month<=12,'Invalid expiration month.','PARSE_ERROR');
+  const last=new Date(Date.UTC(year,month,0)).getUTCDate(); let day=Number(f['17'].slice(4,6));if(day===0)day=last;
+  requireValue(day>=1 && day<=last,'Invalid expiration day.','PARSE_ERROR');
+  return {gtin:f['01'],serial:f['21'],lot:f['10'],expiration:[year,String(month).padStart(2,'0'),String(day).padStart(2,'0')].join('-')};
 }
-function productRow(row, approved) {
-  need(row && typeof row === 'object', 'Invalid library row');
-  const abc = String(row.abc || '').trim(), description = String(row.description || '').trim();
-  const original = String(row.ndc || '').trim();
-  need(/^\d{1,30}$/.test(abc), 'Invalid ABC number');
-  need(description.length > 0 && description.length <= 300, 'Missing/overlong description');
-  let ndc = original;
-  if (/^\d{1,5}-\d{1,4}-\d{1,2}$/.test(ndc)) {
-    const parts = ndc.split('-');
-    need(['5-4-2', '4-4-2', '5-3-2', '5-4-1'].includes(parts.map(p => p.length).join('-')), 'Unsupported hyphenated NDC');
-    ndc = parts.map((p, i) => p.padStart([5, 4, 2][i], '0')).join('');
-  } else {
-    if (/^[0-9]+(?:\.[0-9]+)?[eE][+]?[0-9]+$/.test(ndc)) {
-      const n = Number(ndc);
-      need(Number.isSafeInteger(n), 'NDC scientific notation is not an exact integer');
-      ndc = String(n);
-    }
-    need(/^\d{1,11}$/.test(ndc), 'NDC must contain at most 11 digits');
-    if (ndc.length < 11) {
-      need(approved === true, 'Short NDC: approve 11-digit source/leading-zero restoration first');
-      ndc = ndc.padStart(11, '0');
-    }
+function ndcCandidates(gtin) {
+  // Only recognized, zero-indicator legacy US pharmaceutical GTINs.
+  // Other GTIN structures require an exact, reviewed mapping.
+  if (!/^003\d{11}$/.test(gtin)) return { ndc10: null, candidates: [] };
+  const n=gtin.slice(3,13);
+  return {ndc10:n,candidates:[...new Set([
+    '0'+n, // 4-4-2 -> 5-4-2
+    n.slice(0,5)+'0'+n.slice(5), // 5-3-2 -> 5-4-2
+    n.slice(0,9)+'0'+n.slice(9) // 5-4-1 -> 5-4-2
+  ])]};
+}
+function supplierNDC(value) {
+  // This import is explicitly a supplier 11-digit-format report.
+  // Restore leading zeros lost by spreadsheet numeric formatting; never apply this to scanned NDC10.
+  let s=String(value??'').trim();
+  if (/^\d{5}-\d{4}-\d{2}$/.test(s)) return s.replace(/-/g,'');
+  if (/^\d+(?:\.\d+)?[eE][+]?\d+$/.test(s)) {
+    const n=Number(s); requireValue(Number.isSafeInteger(n),'Invalid scientific-notation NDC.');s=String(n);
   }
-  return { abc, description, ndc_original: original, ndc11: ndc };
+  requireValue(/^\d{1,11}$/.test(s),'Supplier NDC must represent an 11-digit value.');
+  return s.padStart(11,'0');
 }
+function manualNDC(value) {
+  const s=String(value??'').trim();
+  requireValue(/^\d{11}$/.test(s)||/^\d{5}-\d{4}-\d{2}$/.test(s),'Enter an 11-digit NDC (or 5-4-2 hyphenated NDC).');
+  return s.replace(/-/g,'');
+}
+function productRow(r) {
+  const abc=String(r.abc??'').trim(),description=String(r.description??'').trim(),original=String(r.ndc??'').trim();
+  requireValue(/^\d{1,30}$/.test(abc),'Invalid supplier ABC number.');
+  requireValue(description.length>0&&description.length<=300,'Description is required (maximum 300 characters).');
+  return {abc,description,ndc_original:original,ndc11:supplierNDC(original)};
+}
+function displayABC(abc) { return abc.startsWith('MANUAL-') ? '' : abc; }
+function publicProduct(p) {return {abc:displayABC(p.abc),description:p.description,ndc11:p.ndc11,libraryId:p.abc};}
+async function resolveProduct(db, parsed) {
+  const mapped=await db.prepare('SELECT p.* FROM gtin_mappings m JOIN products p ON p.abc=m.product_abc WHERE m.gtin=?').bind(parsed.gtin).first();
+  const candidateInfo=ndcCandidates(parsed.gtin);
+  if(mapped)return {product:mapped,method:'exact GTIN mapping',supplierEntries:1,...candidateInfo};
+  if(!candidateInfo.candidates.length)return {product:null,reason:'UNKNOWN_PRODUCT',...candidateInfo};
+  const marks=candidateInfo.candidates.map(()=>'?').join(',');
+  const rows=(await db.prepare('SELECT * FROM products WHERE ndc11 IN ('+marks+') ORDER BY abc').bind(...candidateInfo.candidates).all()).results;
+  const ndcs=[...new Set(rows.map(r=>r.ndc11))];
+  if(ndcs.length===1) {
+    // Same NDC, multiple supplier catalog records: retain all library rows and use a stable representative.
+    rows.sort((a,b)=>Number(a.abc.startsWith('MANUAL-'))-Number(b.abc.startsWith('MANUAL-'))||a.abc.localeCompare(b.abc));
+    return {product:rows[0],method:'unique library NDC match',supplierEntries:rows.length,...candidateInfo};
+  }
+  return {product:null,reason:ndcs.length?'AMBIGUOUS_MATCH':'UNKNOWN_PRODUCT',matches:rows.map(publicProduct),...candidateInfo};
+}
+async function existingVial(db,p) {
+  return db.prepare('SELECT * FROM events WHERE gtin=? AND serial=? ORDER BY seq DESC LIMIT 1').bind(p.gtin,p.serial).first();
+}
+const INVENTORY_SQL=`SELECT e.gtin,e.serial,e.lot,e.expiration,e.product_abc,p.description,p.ndc11,
+ CASE WHEN e.action='PULL' THEN 'Out' ELSE 'In stock' END AS status,
+ e.action AS last_action,e.created_at AS last_action_at,
+ s.scanned_in_at,s.last_scanned_out_at,s.last_returned_at,s.pull_count,s.return_count
+ FROM events e JOIN products p ON p.abc=e.product_abc
+ JOIN (SELECT gtin,serial,
+ MIN(CASE WHEN action='RECEIVE' THEN created_at END) AS scanned_in_at,
+ MAX(CASE WHEN action='PULL' THEN created_at END) AS last_scanned_out_at,
+ MAX(CASE WHEN action='RETURN' THEN created_at END) AS last_returned_at,
+ SUM(CASE WHEN action='PULL' THEN 1 ELSE 0 END) AS pull_count,
+ SUM(CASE WHEN action='RETURN' THEN 1 ELSE 0 END) AS return_count
+ FROM events GROUP BY gtin,serial) s ON s.gtin=e.gtin AND s.serial=e.serial
+ WHERE e.seq=(SELECT MAX(r.seq) FROM events r WHERE r.gtin=e.gtin AND r.serial=e.serial)
+ ORDER BY p.description,e.expiration,e.serial`;
 export default {
-  async fetch(request, env) {
-    const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
-      'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY' };
-    try {
-      const url = new URL(request.url);
-      if (request.method === 'GET' && url.pathname === '/health')
-        return json({ ok: true, application: 'onco-infusion-scan', version: 'prototype-0.1.2', frontend: 'github-static-assets' });
-      if (!env.APP_USER || !env.APP_PASSWORD)
-        return new Response('Configure APP_USER and APP_PASSWORD secrets before using this prototype.', { status: 503, headers });
-      if (!(await authorized(request, env)))
-        return new Response('Sign in required', { status: 401, headers: { ...headers,
-          'WWW-Authenticate': 'Basic realm="Infusion scanner", charset="UTF-8"' } });
-
-      // New routing: authenticate first, then serve frontend files via ASSETS.
-      // Keep run_worker_first: true in wrangler.jsonc.
-      const isAPI = url.pathname === '/api' || url.pathname.startsWith('/api/');
-      if (!isAPI) {
-        if (!['GET', 'HEAD'].includes(request.method)) return json({ error: 'Not found' }, 404);
-        need(env.ASSETS, 'Static assets binding ASSETS is missing');
-        const assetResponse = await env.ASSETS.fetch(request);
-        const response = new Response(assetResponse.body, assetResponse);
-        for (const [key, value] of Object.entries(headers)) response.headers.set(key, value);
-        response.headers.set('Content-Security-Policy',
-          "default-src 'self'; script-src 'self' https://cdn.sheetjs.com; style-src 'self'; " +
-          "connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
-        return response;
-      }
-      need(env.DB, 'Bind the D1 database as DB');
-      if (request.method === 'GET' && url.pathname === '/api/data') {
-        const result = await env.DB.batch([
-          env.DB.prepare('SELECT * FROM products ORDER BY description, abc'),
-          env.DB.prepare('SELECT * FROM inventory ORDER BY description, expiration, serial'),
-          env.DB.prepare('SELECT * FROM events ORDER BY seq DESC')
-        ]);
-        return json({ products: result[0].results, inventory: result[1].results, activity: result[2].results });
-      }
-      if (request.method !== 'POST') return json({ error: 'Not found' }, 404);
-      need(request.headers.get('Origin') === url.origin, 'Cross-origin or missing-origin write rejected');
-      need((request.headers.get('Content-Type') || '').startsWith('application/json'), 'JSON required');
-      const text = await request.text(); need(text.length <= 1000000, 'Request exceeds prototype size limit');
-      const body = JSON.parse(text);
-      if (url.pathname === '/api/parse') return json(parseScan(body.raw));
-      if (url.pathname === '/api/import') {
-        need(Array.isArray(body.rows) && body.rows.length > 0 && body.rows.length <= 2000, 'Import 1-2000 rows');
-        const rows = body.rows.map(r => productRow(r, body.approvePadding));
-        const seen = new Map();
-        for (const row of rows) {
-          const p = seen.get(row.abc);
-          need(!p || (p.description === row.description && p.ndc11 === row.ndc11), 'Conflicting duplicate ABC: ' + row.abc);
-          seen.set(row.abc, row);
-        }
-        const existingRows = (await env.DB.prepare('SELECT * FROM products').all()).results;
-        const map = new Map(existingRows.map(r => [r.abc, r]));
-        for (const row of rows) {
-          const p = map.get(row.abc);
-          need(!p || (p.description === row.description && p.ndc11 === row.ndc11), 'Existing ABC conflicts; no changes imported: ' + row.abc);
-        }
-        let inserted = 0;
-        for (let i = 0; i < rows.length; i += 50) {
-          const results = await env.DB.batch(rows.slice(i, i + 50).map(r => env.DB.prepare(
-            'INSERT INTO products (abc, description, ndc_original, ndc11) VALUES (?, ?, ?, ?) ON CONFLICT(abc) DO NOTHING'
-          ).bind(r.abc, r.description, r.ndc_original, r.ndc11)));
-          inserted += results.reduce((n, r) => n + (r.meta.changes || 0), 0);
-        }
-        return json({ inserted, skipped: rows.length - inserted });
-      }
-      if (url.pathname === '/api/scan') {
-        need(['RECEIVE', 'PULL', 'RETURN'].includes(body.action), 'Invalid action');
-        need(typeof body.requestId === 'string' && /^[0-9a-f-]{36}$/i.test(body.requestId), 'Invalid request ID');
-        const parsed = parseScan(body.raw);
-        const hash = await digest(JSON.stringify([body.raw, body.action, body.abc || '']));
-        const prior = await env.DB.prepare('SELECT * FROM events WHERE request_id = ?').bind(body.requestId).first();
-        if (prior) { need(prior.request_hash === hash, 'Request ID reused with different content'); return json({ saved: true, replayed: true, ...parsed }); }
-        const existing = await env.DB.prepare('SELECT * FROM events WHERE gtin = ? AND serial = ? ORDER BY seq DESC LIMIT 1')
-          .bind(parsed.gtin, parsed.serial).first();
-        const abc = existing ? existing.product_abc : String(body.abc || '');
-        if (!existing) {
-          need(body.action === 'RECEIVE', 'Unknown vial; receive it first');
-          need(body.confirmProduct === true, 'Confirm selected library product matches the physical vial');
-          need(await env.DB.prepare('SELECT abc FROM products WHERE abc = ?').bind(abc).first(), 'Choose a library product');
-        }
-        await env.DB.prepare('INSERT INTO events (request_id, request_hash, action, gtin, serial, lot, expiration, product_abc, raw_scan) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-          .bind(body.requestId, hash, body.action, parsed.gtin, parsed.serial, parsed.lot, parsed.expiration, abc, body.raw).run();
-        return json({ saved: true, ...parsed });
-      }
-      return json({ error: 'Not found' }, 404);
-    } catch (error) {
-      return json({ error: String(error.message || error).replace(/^D1_ERROR:\s*/, '') }, 400);
+ async fetch(request,env) {
+  const security={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY'};
+  try {
+   const url=new URL(request.url);
+   if(request.method==='GET'&&url.pathname==='/health')return json({ok:true,application:'onco-infusion-scan',version:VERSION});
+   if(!env.APP_USER||!env.APP_PASSWORD)return new Response('Configure APP_USER and APP_PASSWORD secrets.',{status:503,headers:security});
+   if(!await authorized(request,env))return new Response('Sign in required',{status:401,headers:{...security,'WWW-Authenticate':'Basic realm="Infusion scanner", charset="UTF-8"'}});
+   if(!(url.pathname==='/api'||url.pathname.startsWith('/api/'))) {
+    if(!['GET','HEAD'].includes(request.method))return json({error:'Not found'},404);
+    requireValue(env.ASSETS,'Missing ASSETS binding.');
+    const a=await env.ASSETS.fetch(request),r=new Response(a.body,a);
+    for(const [k,v]of Object.entries(security))r.headers.set(k,v);
+    r.headers.set('Content-Security-Policy',"default-src 'self'; script-src 'self' https://cdn.sheetjs.com; style-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");return r;
+   }
+   requireValue(env.DB,'Missing DB binding.');
+   if(request.method==='GET'&&url.pathname==='/api/data') {
+    const r=await env.DB.batch([
+     env.DB.prepare('SELECT * FROM products ORDER BY description,abc'),env.DB.prepare(INVENTORY_SQL),
+     env.DB.prepare('SELECT e.*,p.description,p.ndc11 FROM events e JOIN products p ON p.abc=e.product_abc ORDER BY e.seq DESC')]);
+    return json({products:r[0].results,inventory:r[1].results,activity:r[2].results,version:VERSION});
+   }
+   if(request.method!=='POST')return json({error:'Not found'},404);
+   requireValue(request.headers.get('Origin')===url.origin,'Cross-origin or missing-origin write rejected.');
+   requireValue((request.headers.get('Content-Type')||'').startsWith('application/json'),'JSON required.');
+   const text=await request.text();requireValue(text.length<=1000000,'Request too large.');const b=JSON.parse(text);
+   if(url.pathname==='/api/import') {
+    requireValue(Array.isArray(b.rows)&&b.rows.length>0&&b.rows.length<=2000,'Import 1-2000 rows.');
+    const unique=new Map();
+    for(const row of b.rows){const r=productRow(row),p=unique.get(r.abc);requireValue(!p||(p.ndc11===r.ndc11&&p.description===r.description),'Conflicting duplicate ABC '+r.abc);unique.set(r.abc,r);}
+    const rows=[...unique.values()],old=new Map((await env.DB.prepare('SELECT * FROM products').all()).results.map(p=>[p.abc,p]));
+    for(const r of rows){const p=old.get(r.abc);requireValue(!p||(p.ndc11===r.ndc11&&p.description===r.description),'Existing ABC conflicts: '+r.abc+'. Nothing imported by this request yet.');}
+    let inserted=0;
+    for(let i=0;i<rows.length;i+=50){const results=await env.DB.batch(rows.slice(i,i+50).map(r=>env.DB.prepare('INSERT INTO products(abc,description,ndc_original,ndc11) VALUES(?,?,?,?) ON CONFLICT(abc) DO NOTHING').bind(r.abc,r.description,r.ndc_original,r.ndc11)));inserted+=results.reduce((n,r)=>n+(r.meta.changes||0),0);}
+    return json({inserted,skipped:rows.length-inserted,duplicates:b.rows.length-rows.length});
+   }
+   if(url.pathname==='/api/inspect') {
+    const p=parseScan(b.raw,env.SCAN_SEPARATOR||''),existing=await existingVial(env.DB,p);
+    if(existing){const product=await env.DB.prepare('SELECT * FROM products WHERE abc=?').bind(existing.product_abc).first();return json({...p,match:{...publicProduct(product),method:'existing vial'},currentStatus:existing.action==='PULL'?'Out':'In stock'});}
+    const m=await resolveProduct(env.DB,p);
+    return json({...p,ndc10:m.ndc10,candidates:m.candidates,match:m.product?{...publicProduct(m.product),method:m.method,supplierEntries:m.supplierEntries}:null,reason:m.reason,matches:m.matches});
+   }
+   if(url.pathname==='/api/products/add') {
+    requireValue(b.action==='RECEIVE','Add an unknown product during Receive only.');
+    const p=parseScan(b.raw,env.SCAN_SEPARATOR||''),ndc=manualNDC(b.ndc),description=String(b.description??'').trim();
+    requireValue(description.length>0&&description.length<=300,'Enter medication name, strength and package description (maximum 300 characters).');
+    const c=ndcCandidates(p.gtin);
+    requireValue(!c.candidates.length||c.candidates.includes(ndc),'Entered NDC does not correspond to any valid conversion of this scanned GTIN. Check the physical label.');
+    const abcInput=String(b.abc??'').trim();requireValue(!abcInput||/^\d{1,30}$/.test(abcInput),'ABC number must be digits or blank.');
+    const mapped=await env.DB.prepare('SELECT p.* FROM gtin_mappings m JOIN products p ON p.abc=m.product_abc WHERE m.gtin=?').bind(p.gtin).first();
+    if(mapped){requireValue(mapped.ndc11===ndc,'This GTIN is already mapped to another NDC.');return json({product:publicProduct(mapped),alreadyMapped:true});}
+    // Reuse an existing entry with the chosen NDC when possible.
+    let product=abcInput?await env.DB.prepare('SELECT * FROM products WHERE abc=?').bind(abcInput).first():null;
+    if(product)requireValue(product.ndc11===ndc&&product.description===description,'ABC already exists with different details; no changes made.');
+    if(!product&&!abcInput)product=await env.DB.prepare('SELECT * FROM products WHERE ndc11=? ORDER BY abc LIMIT 1').bind(ndc).first();
+    const abc=product?product.abc:abcInput||'MANUAL-'+crypto.randomUUID();
+    const statements=[];
+    if(!product)statements.push(env.DB.prepare('INSERT INTO products(abc,description,ndc_original,ndc11) VALUES(?,?,?,?)').bind(abc,description,ndc,ndc));
+    statements.push(env.DB.prepare('INSERT INTO gtin_mappings(gtin,product_abc) VALUES(?,?)').bind(p.gtin,abc));
+    await env.DB.batch(statements);
+    return json({product:publicProduct(product||{abc,description,ndc11:ndc}),added:!product});
+   }
+   if(url.pathname==='/api/scan') {
+    requireValue(['RECEIVE','PULL','RETURN'].includes(b.action),'Invalid action.');
+    requireValue(typeof b.requestId==='string'&&/^[0-9a-f-]{36}$/i.test(b.requestId),'Invalid request ID.');
+    const p=parseScan(b.raw,env.SCAN_SEPARATOR||''),requestHash=await hash(JSON.stringify([b.raw,b.action]));
+    const prior=await env.DB.prepare('SELECT * FROM events WHERE request_id=?').bind(b.requestId).first();
+    if(prior){requireValue(prior.request_hash===requestHash,'Request ID reused with different content.');const product=await env.DB.prepare('SELECT * FROM products WHERE abc=?').bind(prior.product_abc).first();return json({saved:true,replayed:true,...p,product:publicProduct(product)});}
+    const existing=await existingVial(env.DB,p);let product;
+    if(existing)product=await env.DB.prepare('SELECT * FROM products WHERE abc=?').bind(existing.product_abc).first();
+    else {
+     requireValue(b.action==='RECEIVE','This vial has not been received. Pull/Return cannot create new inventory.','UNKNOWN_VIAL');
+     const m=await resolveProduct(env.DB,p);
+     requireValue(m.product,m.reason==='AMBIGUOUS_MATCH'?'More than one NDC matches. Resolve the package NDC before receiving.':'Product not found. Add it to the library before receiving.',m.reason,409,{parsed:p,ndc10:m.ndc10,candidates:m.candidates,matches:m.matches||[]});product=m.product;
     }
-  }
+    await env.DB.prepare('INSERT INTO events(request_id,request_hash,action,gtin,serial,lot,expiration,product_abc,raw_scan) VALUES(?,?,?,?,?,?,?,?,?)')
+      .bind(b.requestId,requestHash,b.action,p.gtin,p.serial,p.lot,p.expiration,product.abc,b.raw).run();
+    return json({saved:true,...p,product:publicProduct(product),status:b.action==='PULL'?'Out':'In stock'});
+   }
+   return json({error:'Not found'},404);
+  }catch(e){return json({error:String(e.message||e).replace(/^D1_ERROR:\s*/,''),code:e.code||'REQUEST_ERROR',...(e.details||{})},e.status||400);}
+ }
 };
