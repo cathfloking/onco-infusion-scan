@@ -24,40 +24,109 @@ async function authorized(request, env) {
     await hash('Basic ' + btoa(env.APP_USER + ':' + env.APP_PASSWORD));
 }
 function parseScan(raw, substitute = '') {
-  requireValue(typeof raw === 'string' && raw.length > 0 && raw.length <= 512, 'Scan must contain 1-512 characters.');
+  // Supported separatorless profile: (01) GTIN (21) serial (17) expiry (10) lot.
+  // A unique result is unique within this profile, not proof of the original encoding.
+  function fail(message, code = 'PARSE_ERROR') {
+    throw new AppError(message, code, 400);
+  }
+  function validate(fields) {
+    const gtin = fields['01'];
+    if (!/^\d{14}$/.test(gtin || '')) fail('GTIN must contain 14 digits.');
+    let sum = 0;
+    for (let i = 0; i < 13; i++) sum += Number(gtin[i]) * (i % 2 === 0 ? 3 : 1);
+    if ((10 - sum % 10) % 10 !== Number(gtin[13])) fail('GTIN check digit failed.');
+    if (!/^[\x21-\x7e]{1,20}$/.test(fields['21'] || '')) fail('Serial must contain 1-20 printable characters.');
+    if (!/^[\x21-\x7e]{1,20}$/.test(fields['10'] || '')) fail('Lot must contain 1-20 printable characters.');
+    const encoded = fields['17'] || '';
+    if (!/^\d{6}$/.test(encoded)) fail('Expiration must contain 6 digits.');
+    const year = 2000 + Number(encoded.slice(0, 2));
+    const month = Number(encoded.slice(2, 4));
+    if (month < 1 || month > 12) fail('Invalid expiration month.');
+    const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    let day = Number(encoded.slice(4, 6));
+    if (day === 0) day = last;
+    if (day < 1 || day > last) fail('Invalid expiration day.');
+    return {
+      gtin,
+      serial: fields['21'],
+      lot: fields['10'],
+      expiration: [year, String(month).padStart(2, '0'), String(day).padStart(2, '0')].join('-')
+    };
+  }
+
+  if (typeof raw !== 'string' || raw.length === 0 || raw.length > 512) {
+    fail('Scan must contain 1-512 characters.');
+  }
   let s = raw.replace(/[\r\n]+$/g, '');
   if (s.startsWith(']d2')) s = s.slice(3);
-  // Explicit test notation; no inferred serial boundaries.
   s = s.replace(/<GS>/g, '\x1d');
   if (substitute) {
-    requireValue(substitute.length === 1 && /^[\x21-\x7e]$/.test(substitute), 'Invalid configured SCAN_SEPARATOR.');
+    if (substitute.length !== 1 || !/^[\x21-\x7e]$/.test(substitute)) {
+      fail('Invalid configured SCAN_SEPARATOR.');
+    }
     s = s.split(substitute).join('\x1d');
   }
-  const f = {};
+
+  // No separator: apply ONLY the explicitly supported manufacturer layout.
+  if (!s.includes('\x1d') && /^01\d{14}21/.test(s)) {
+    const gtin = s.slice(2, 16);
+    const tail = s.slice(18);
+    const candidates = [];
+
+    for (let boundary = 1; boundary <= 20; boundary++) {
+      // After serial: 17 + YYMMDD + 10 + lot.
+      if (tail.slice(boundary, boundary + 2) !== '17') continue;
+      if (tail.slice(boundary + 8, boundary + 10) !== '10') continue;
+      const serial = tail.slice(0, boundary);
+      const encoded = tail.slice(boundary + 2, boundary + 8);
+      const lot = tail.slice(boundary + 10);
+      if (!/^\d{6}$/.test(encoded) || !lot.length || lot.length > 20) continue;
+      try {
+        candidates.push(validate({ '01': gtin, '21': serial, '17': encoded, '10': lot }));
+      } catch (error) {
+        if (!(error instanceof AppError)) throw error;
+      }
+    }
+
+    if (candidates.length === 0) {
+      fail('Scan does not fit the supported separatorless layout (01 GTIN, 21 serial, 17 expiration, 10 lot), or an identifier/date is invalid. No inventory saved.', 'UNSUPPORTED_RAW_LAYOUT');
+    }
+    if (candidates.length > 1) {
+      fail('More than one serial/expiration/lot interpretation fits this raw scan. Check the printed label or scanner configuration; no inventory saved.', 'AMBIGUOUS_RAW_SCAN');
+    }
+    return {
+      ...candidates[0],
+      parseMode: 'separatorless-01-21-17-10',
+      parseWarning: 'Field boundaries reconstructed using the supported 01/21/17/10 layout.'
+    };
+  }
+
+  // Normal GS1 parsing when separators are supplied, or when no reconstruction is needed.
+  const fields = {};
   while (s.length) {
     if (s[0] === '\x1d') { s = s.slice(1); continue; }
-    const ai = s.slice(0, 2); s = s.slice(2);
-    requireValue(['01','17','10','21'].includes(ai), 'Unsupported AI or missing field separator near ' + ai, 'PARSE_ERROR');
-    requireValue(f[ai] === undefined, 'Duplicate AI ' + ai, 'PARSE_ERROR');
+    const ai = s.slice(0, 2);
+    s = s.slice(2);
+    if (!['01', '17', '10', '21'].includes(ai)) fail('Unsupported AI or missing separator near ' + ai);
+    if (fields[ai] !== undefined) fail('Duplicate AI ' + ai);
     if (ai === '01' || ai === '17') {
       const n = ai === '01' ? 14 : 6;
-      requireValue(new RegExp('^\\d{' + n + '}').test(s), 'Invalid AI ' + ai, 'PARSE_ERROR');
-      f[ai] = s.slice(0,n); s = s.slice(n);
+      if (!new RegExp('^\\d{' + n + '}').test(s)) fail('Invalid fixed-length AI ' + ai);
+      fields[ai] = s.slice(0, n);
+      s = s.slice(n);
     } else {
-      const end = s.indexOf('\x1d'); f[ai] = end < 0 ? s : s.slice(0,end); s = end < 0 ? '' : s.slice(end+1);
-      requireValue(/^[\x21-\x7e]{1,20}$/.test(f[ai]),
-        'Missing GS separator or invalid lot/serial. A pasted test needs <GS> after a non-final variable-length field.', 'MISSING_SEPARATOR');
+      const end = s.indexOf('\x1d');
+      fields[ai] = end < 0 ? s : s.slice(0, end);
+      s = end < 0 ? '' : s.slice(end + 1);
+      if (!/^[\x21-\x7e]{1,20}$/.test(fields[ai])) {
+        fail('Missing separator or invalid lot/serial. This field order is not supported for separatorless reconstruction.', 'UNSUPPORTED_RAW_LAYOUT');
+      }
     }
   }
-  requireValue(['01','17','10','21'].every(k=>f[k]),
-    'Need GTIN, expiration, lot and serial. Check GS separators; the app will not guess serial boundaries.', 'MISSING_SEPARATOR');
-  let sum=0; for(let i=0;i<13;i++) sum+=Number(f['01'][i])*(i%2===0?3:1);
-  requireValue((10-sum%10)%10===Number(f['01'][13]), 'GTIN check digit failed.', 'PARSE_ERROR');
-  const year=2000+Number(f['17'].slice(0,2)), month=Number(f['17'].slice(2,4));
-  requireValue(month>=1 && month<=12,'Invalid expiration month.','PARSE_ERROR');
-  const last=new Date(Date.UTC(year,month,0)).getUTCDate(); let day=Number(f['17'].slice(4,6));if(day===0)day=last;
-  requireValue(day>=1 && day<=last,'Invalid expiration day.','PARSE_ERROR');
-  return {gtin:f['01'],serial:f['21'],lot:f['10'],expiration:[year,String(month).padStart(2,'0'),String(day).padStart(2,'0')].join('-')};
+  if (!['01', '17', '10', '21'].every(key => fields[key])) {
+    fail('Need GTIN, serial, expiration and lot. Unsupported layout or missing field separator.', 'UNSUPPORTED_RAW_LAYOUT');
+  }
+  return { ...validate(fields), parseMode: 'gs1-fields' };
 }
 function ndcCandidates(gtin) {
   // Only recognized, zero-indicator legacy US pharmaceutical GTINs.
