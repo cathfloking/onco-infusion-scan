@@ -1,50 +1,45 @@
 <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="application-version" content="prototype-0.1.2">
-  <title>Oncology Infusion Scanner</title>
-  <link rel="stylesheet" href="/styles.css">
-  <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script defer src="/app.js"></script>
-</head>
-<body>
-  <h1>Oncology Infusion Scanner</h1>
-  <p class="notice">Test prototype — no patient information. Shared sign-in; no individual user attribution. Expiration warnings do not block transactions.</p>
-  <p class="version">prototype-0.1.2 · Frontend served from GitHub-managed static files</p>
-  <section>
-    <h2>1. Drug library</h2>
-    <input id="file" type="file" accept=".xlsx">
-    <label><input id="pad" type="checkbox"> I verified shortened numeric NDCs are 11-digit-format values with leading zeros lost. Restore those zeros.</label>
-    <button id="preview">Preview file</button>
-    <button id="import" disabled>Import previewed rows</button>
-    <pre id="previewText">Choose your Excel file, then preview.</pre>
-  </section>
-  <section>
-    <h2>2. Scan</h2>
-    <label>Action
-      <select id="action"><option value="RECEIVE">Receive</option><option value="PULL">Pull</option><option value="RETURN">Return</option></select>
-    </label>
-    <label>Library product — required for the first receipt of each new vial
-      <select id="product"><option value="">Choose product</option></select>
-    </label>
-    <label><input id="confirm" type="checkbox"> I verified the selected product matches the physical vial.</label>
-    <form id="scanForm">
-      <label>Scan here <input id="raw" type="text" autocomplete="off" spellcheck="false"></label>
-      <button type="submit">Save scan</button>
-      <button type="button" id="diagnose">Diagnose only</button>
-    </form>
-    <p id="status" role="status"></p>
-    <details open><summary>Scan diagnostics</summary><pre id="diagnostic">No scan yet.</pre></details>
-  </section>
-  <section>
-    <h2>3. Inventory</h2>
-    <button id="refresh">Refresh</button> <button id="export">Export Excel</button>
-    <label>Search <input id="search" type="text" placeholder="Description, lot, serial, NDC..."></label>
-    <label>Status <select id="filter"><option value="">All</option><option>In stock</option><option>Out</option></select></label>
-    <p id="count"></p><div id="inventory" class="scroll"></div>
-  </section>
-  <section><h2>Recent activity</h2><div id="activity" class="scroll"></div></section>
-</body>
-</html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Oncology Infusion Scanner</title>
+<link rel="stylesheet" href="/styles.css">
+<script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script defer src="/app.js"></script>
+</head><body>
+<h1>Oncology Infusion Scanner</h1>
+<p class="notice">Test prototype — no patient information. Shared sign-in. Manufacturer expiration warnings are not hard stops. This is an internal inventory tool, not a complete DSCSA system.</p>
+<p class="version">prototype-0.2.0 · Automatic library matching</p>
+<section><h2>1. Drug library</h2>
+<p>Upload your supplier report: A = ABC #, B = Product Description, C = NDC. This report uses 11-digit NDCs; leading zeros lost through spreadsheet formatting are restored automatically.</p>
+<input id="file" type="file" accept=".xlsx"><button id="preview">Preview file</button><button id="import" disabled>Import previewed rows</button>
+<pre id="previewText">No file selected.</pre>
+</section>
+<section><h2>2. Scan</h2>
+<label>Action <select id="action"><option value="RECEIVE">Receive</option><option value="PULL">Pull</option><option value="RETURN">Return</option></select></label>
+<form id="scanForm"><label>Scan here <input id="raw" type="text" autocomplete="off" spellcheck="false"></label>
+<button id="save" type="submit">Save scan</button><button id="diagnose" type="button">Diagnose only</button></form>
+<p id="status" role="status" aria-live="polite"></p>
+<div id="lastProduct"></div>
+<details><summary>Scan diagnostics / test input</summary>
+<p>ASCII 29 separates non-final variable-length fields. For pasted tests, use the literal marker &lt;GS&gt;. The application does not infer missing serial boundaries.</p>
+<button id="sample" type="button">Load methotrexate test (does not save)</button>
+<pre id="diagnostic">No scan yet.</pre></details>
+<div id="unknown" hidden>
+<h3 id="unknownTitle">Add product to library</h3><p id="unknownDetails"></p>
+<form id="productForm">
+<label>Medication name, strength and package description <input id="newDescription" type="text" required maxlength="300" placeholder="Example: METHOTREXATE 50 MG SDV 2 ML PF"></label>
+<label>11-digit NDC <input id="newNDC" type="text" required list="ndcOptions" placeholder="11 digits, or 5-4-2 with hyphens"></label>
+<datalist id="ndcOptions"></datalist>
+<label>Supplier ABC # (optional) <input id="newABC" type="text" inputmode="numeric"></label>
+<p>Enter the package NDC verified from the vial/carton. Possible conversions are suggestions, not verified medication identities. Adding the product does not automatically receive the vial.</p>
+<button id="addProduct" type="submit">Add / resolve library product</button><button id="cancelProduct" type="button">Cancel</button>
+</form></div>
+</section>
+<section><h2>3. Inventory</h2>
+<button id="refresh">Refresh</button><button id="export">Export Excel</button>
+<label>Search <input id="search" type="text" placeholder="Medication, lot, serial, NDC..."></label>
+<label>Status <select id="filter"><option value="">All</option><option>In stock</option><option>Out</option></select></label>
+<p id="count"></p><div id="inventory" class="scroll"></div>
+</section>
+<section><h2>Recent activity</h2><div id="activity" class="scroll"></div></section>
+</body></html>
