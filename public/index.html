@@ -1,45 +1,29 @@
-<!doctype html>
-<html lang="en"><head>
+<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Oncology Infusion Scanner</title>
-<link rel="stylesheet" href="/styles.css">
-<script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-<script defer src="/app.js"></script>
-</head><body>
-<h1>Oncology Infusion Scanner</h1>
-<p class="notice">Test prototype — no patient information. Shared sign-in. Manufacturer expiration warnings are not hard stops. This is an internal inventory tool, not a complete DSCSA system.</p>
-<p class="version">prototype-0.2.0 · Automatic library matching</p>
-<section><h2>1. Drug library</h2>
-<p>Upload your supplier report: A = ABC #, B = Product Description, C = NDC. This report uses 11-digit NDCs; leading zeros lost through spreadsheet formatting are restored automatically.</p>
-<input id="file" type="file" accept=".xlsx"><button id="preview">Preview file</button><button id="import" disabled>Import previewed rows</button>
-<pre id="previewText">No file selected.</pre>
+<title>Oncology Infusion Scanner</title><link rel="stylesheet" href="/styles.css">
+<script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script><script defer src="/app.js"></script>
+</head><body><h1>Oncology Infusion Scanner</h1>
+<p class="notice">Test prototype — no patient information. One individual vial per scan. Shared sign-in; no individual user attribution. Manufacturer expiration warnings are not hard stops.</p>
+<p class="version">prototype-0.3.0 · Serialized and nonserialized inventory</p>
+<section><h2>1. Drug library</h2><p>Supplier report columns: ABC #, Product Description, NDC. Numeric formatting is normalized to your supplier's 11-digit format.</p>
+<input id="file" type="file" accept=".xlsx"><button id="preview">Preview file</button><button id="import" disabled>Import previewed rows</button><pre id="previewText">No file selected.</pre></section>
+<section><h2>2. Scan</h2><label>Action <select id="action"><option value="RECEIVE">Receive</option><option value="PULL">Pull</option><option value="RETURN">Return</option></select></label>
+<form id="scanForm"><label>Scan here <input id="raw" type="text" autocomplete="off" spellcheck="false"></label><button id="save" type="submit">Save scan</button><button id="diagnose" type="button">Diagnose only</button></form>
+<p id="status" role="status" aria-live="polite"></p><p id="lastProduct"></p>
+<details><summary>Diagnostics / sample input</summary><button id="sampleSerialized" type="button">Load methotrexate (no save)</button><button id="sampleLot" type="button">Load sodium phosphate (no save)</button><pre id="diagnostic">No scan yet.</pre></details>
+<div id="unknown" hidden><h3>Resolve unknown medication/package</h3><p id="unknownDetails"></p>
+<details id="aliasPanel"><summary>Existing medication, different package NDC: establish a vial alias</summary>
+<form id="aliasForm"><p>Only for a verified individual-vial versus supplier-pack relationship. Every scan will count as ONE vial; do not link a carton barcode as if it were one vial.</p>
+<label>Supplier library entry <select id="aliasProduct" required><option value="">Choose candidate</option></select></label>
+<label>Scanned vial NDC11 <select id="aliasNDC" required></select></label>
+<label>Verification source / reason <input id="aliasReason" type="text" required minlength="8" maxlength="500" placeholder="Example: vial/carton labeling confirms same 5 mL vial"></label>
+<button id="addAlias" type="submit">Save verified package alias</button></form></details>
+<details><summary>Medication is genuinely absent: add a library entry</summary>
+<form id="productForm"><label>Medication, strength and package description <input id="newDescription" type="text" required maxlength="300"></label>
+<label>Scanned package NDC11 <input id="newNDC" type="text" required list="ndcOptions"></label><datalist id="ndcOptions"></datalist>
+<label>ABC # (optional) <input id="newABC" type="text" inputmode="numeric"></label><button id="addProduct" type="submit">Add library entry</button></form></details>
+<p>Saving a library entry or alias does not receive inventory. Press Save scan afterward.</p><button id="cancelUnknown" type="button">Cancel</button></div>
 </section>
-<section><h2>2. Scan</h2>
-<label>Action <select id="action"><option value="RECEIVE">Receive</option><option value="PULL">Pull</option><option value="RETURN">Return</option></select></label>
-<form id="scanForm"><label>Scan here <input id="raw" type="text" autocomplete="off" spellcheck="false"></label>
-<button id="save" type="submit">Save scan</button><button id="diagnose" type="button">Diagnose only</button></form>
-<p id="status" role="status" aria-live="polite"></p>
-<div id="lastProduct"></div>
-<details><summary>Scan diagnostics / test input</summary>
-<p>ASCII 29 separates non-final variable-length fields. For pasted tests, use the literal marker &lt;GS&gt;. The application does not infer missing serial boundaries.</p>
-<button id="sample" type="button">Load methotrexate test (does not save)</button>
-<pre id="diagnostic">No scan yet.</pre></details>
-<div id="unknown" hidden>
-<h3 id="unknownTitle">Add product to library</h3><p id="unknownDetails"></p>
-<form id="productForm">
-<label>Medication name, strength and package description <input id="newDescription" type="text" required maxlength="300" placeholder="Example: METHOTREXATE 50 MG SDV 2 ML PF"></label>
-<label>11-digit NDC <input id="newNDC" type="text" required list="ndcOptions" placeholder="11 digits, or 5-4-2 with hyphens"></label>
-<datalist id="ndcOptions"></datalist>
-<label>Supplier ABC # (optional) <input id="newABC" type="text" inputmode="numeric"></label>
-<p>Enter the package NDC verified from the vial/carton. Possible conversions are suggestions, not verified medication identities. Adding the product does not automatically receive the vial.</p>
-<button id="addProduct" type="submit">Add / resolve library product</button><button id="cancelProduct" type="button">Cancel</button>
-</form></div>
-</section>
-<section><h2>3. Inventory</h2>
-<button id="refresh">Refresh</button><button id="export">Export Excel</button>
-<label>Search <input id="search" type="text" placeholder="Medication, lot, serial, NDC..."></label>
-<label>Status <select id="filter"><option value="">All</option><option>In stock</option><option>Out</option></select></label>
-<p id="count"></p><div id="inventory" class="scroll"></div>
-</section>
-<section><h2>Recent activity</h2><div id="activity" class="scroll"></div></section>
-</body></html>
+<section><h2>3. Inventory</h2><button id="refresh">Refresh</button><button id="export">Export Excel</button>
+<label>Search <input id="search" type="text" placeholder="Medication, NDC, lot, serial..."></label><label>Filter <select id="filter"><option value="">All</option><option value="in">Has In-stock quantity</option><option value="out">Has Out quantity</option></select></label>
+<p id="count"></p><div id="inventory" class="scroll"></div></section><section><h2>Recent activity</h2><div id="activity" class="scroll"></div></section></body></html>
