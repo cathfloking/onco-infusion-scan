@@ -1,16 +1,13 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-
   "name": "onco-infusion-scan",
   "main": "src/worker.js",
   "compatibility_date": "2026-11-10",
-
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
     "run_worker_first": true
   },
-
   "d1_databases": [
     {
       "binding": "DB",
@@ -18,5 +15,15 @@
       "database_id": "8f50ba56-4033-4444-9ed9-0dcef9ed2cd9",
       "migrations_dir": "migrations"
     }
-  ]
+  ],
+  "previews": {
+    "d1_databases": [
+      {
+        "binding": "DB",
+        "database_name": "onco-infusion-scan-preview",
+        "database_id": "5e9c4ed3-2a11-4ae7-aee9-2bbe6913848e",
+        "migrations_dir": "migrations"
+      }
+    ]
+  }
 }
