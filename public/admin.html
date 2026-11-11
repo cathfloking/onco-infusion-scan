@@ -1,0 +1,31 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Administration - Oncology Infusion Scanner</title><link rel="stylesheet" href="/admin.css"><script defer src="/admin.js"></script>
+</head><body><h1>Administration</h1>
+<p class="notice">Library and package-alias management. Changes are audited with a reason, but the interim administrator credential is shared and cannot identify an individual. No patient information. <a href="/">Back to scanning</a></p>
+<section id="login"><h2>Administrator sign-in</h2>
+<form id="loginForm"><label>Administrator user <input id="adminUser" type="text" autocomplete="off" required></label>
+<label>Administrator password <input id="adminPass" type="password" autocomplete="off" required></label>
+<button type="submit">Unlock administration</button></form></section>
+<p id="status" role="status" aria-live="polite"></p>
+<div id="panel" hidden>
+<nav><button id="tabLibrary" type="button">Drug library</button><button id="tabAliases" type="button">Package aliases</button><button id="tabAudit" type="button">Audit history</button><button id="reload" type="button">Refresh</button><button id="lock" type="button">Lock</button></nav>
+<section id="libraryView"><h2>Drug library</h2>
+<p>NDC and the internal key cannot be edited here because they control scan matching. To correct an NDC, archive the entry and add a new one during Receive. Description edits also change how older activity is displayed.</p>
+<label>Search <input id="libSearch" type="text" placeholder="Description, NDC, supplier ABC"></label>
+<label><input id="showArchived" type="checkbox"> Show archived</label>
+<div id="libraryTable" class="scroll"></div>
+<form id="editForm" hidden><h3>Edit library entry</h3><p id="editInfo"></p>
+<label>Description <input id="editDescription" type="text" required maxlength="300"></label>
+<label>Supplier ABC (digits, or blank) <input id="editAbc" type="text" inputmode="numeric" maxlength="30"></label>
+<label>Reason for change (8-500 characters) <input id="editReason" type="text" required minlength="8" maxlength="500"></label>
+<button id="saveEdit" type="submit">Save changes</button><button id="toggleArchive" type="button"></button><button id="cancelEdit" type="button">Cancel</button>
+<p>Archived entries block new Receives. Existing stock can still be Pulled and Returned.</p></form></section>
+<section id="aliasView" hidden><h2>Package aliases</h2>
+<p>A disabled alias stops future matching and Receive for that exact GTIN. It does not fall back to any other match. Recorded inventory keeps its association and can still be Pulled or Returned.</p>
+<div id="aliasTable" class="scroll"></div>
+<form id="aliasForm" hidden><h3 id="aliasTitle"></h3><p id="aliasInfo"></p>
+<label>Reason for change (8-500 characters) <input id="aliasReason" type="text" required minlength="8" maxlength="500"></label>
+<button id="saveAlias" type="submit"></button><button id="cancelAlias" type="button">Cancel</button></form></section>
+<section id="auditView" hidden><h2>Audit history (latest 200)</h2><div id="auditTable" class="scroll"></div></section>
+</div></body></html>
