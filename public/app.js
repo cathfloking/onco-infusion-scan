@@ -98,7 +98,7 @@ function renderInventory(){
 function activityLabel(r){return r.action==='ADJUST'?'ADJUST '+(r.adjust_bucket==='OUT'?'Out':'In stock')+' '+(Number(r.quantity)>0?'+':'')+r.quantity:r.action;}
 function renderActivity(){
  const q=$('actSearch').value.toLowerCase(),f=$('actFilter').value;
- const rows=data.activity.filter(r=>!f||r.action===f).slice(0,100).map(r=>{const row={'Scanned At (Eastern)':fmtET(r.created_at),'Action':activityLabel(r),'Product Description':r.description,'Tracking Mode':r.tracking_mode,'Lot Number':String(r.lot),'Serial Number':r.serial===null?'':String(r.serial),
+ const rows=data.activity.filter(r=>!f||r.action===f).map(r=>{const row={'Scanned At (Eastern)':fmtET(r.created_at),'Action':activityLabel(r),'Product Description':r.description,'Tracking Mode':r.tracking_mode,'Lot Number':String(r.lot),'Serial Number':r.serial===null?'':String(r.serial),
   'Detail':r.action==='ADJUST'?String(r.raw_scan).replace(/^Admin adjustment \([^)]*\): /,''):''};Object.defineProperty(row,'_t',{value:r.created_at,enumerable:false});return row;}).filter(r=>!q||JSON.stringify(r).toLowerCase().includes(q));
  table('activity',rows,cols(['Scanned At (Eastern)','Action','Product Description','Tracking Mode','Lot Number','Serial Number','Detail'],null,{'Scanned At (Eastern)':{sort:r=>r._t}}));
 }
@@ -236,46 +236,32 @@ function openEditor(cfg){
 }
 async function afterAdminSave(message){try{await adminLoad();await refresh();}catch(e){toast(e.message,true);}toast(message);}
 function editLibrary(p){
- const id=p.id??p.abc,cur={description:p.description,abc:p.supplier_abc??'',ndc:p.ndc11,archived:!!p.archived_at,version:p.version};
- openEditor({title:'Edit library entry',info:'Every column can be edited. The internal key and version are system values.',
-  fields:[
-   {key:'abc',label:'Supplier ABC # (digits, or blank)',value:cur.abc},
-   {key:'description',label:'Product description',value:cur.description},
-   {key:'ndc',label:'NDC11',value:cur.ndc,note:'Editable only while no inventory, alias or mapping uses this entry. Otherwise archive it and add a corrected entry.'},
-   {key:'status',label:'Status',type:'select',value:cur.archived?'archived':'active',options:[{value:'active',label:'Active'},{value:'archived',label:'Archived (blocks new Receives)'}]},
-   {label:'Internal key (permanent)',value:id,readonly:true},{label:'Created',value:fmtET(p.created_at),readonly:true},{label:'Version',value:String(cur.version),readonly:true}],
-  onSubmit:async(v,reason)=>{
-   let version=cur.version,did=false;
-   if(v.description.trim()!==cur.description||v.abc.trim()!==cur.abc||v.ndc.trim()!==cur.ndc){const r=await api('/api/admin/product/update',{id,version,description:v.description,supplierAbc:v.abc,ndc11:v.ndc,reason},adminHeaders());version=r.version;did=true;}
-   const wantArchived=v.status==='archived';
-   if(wantArchived!==cur.archived){await api('/api/admin/product/archive',{id,version,archived:wantArchived,reason},adminHeaders());did=true;}
-   if(!did)throw Error('No changes to save.');
-   await afterAdminSave('Library entry saved.');}});
+ const id=p.id??p.abc;
+ openEditor({title:'Edit library entry',info:'Editable: supplier ABC, description, eligible NDC and archive status. Internal key, timestamps and version are permanent system values.',
+ fields:[{key:'abc',label:'Supplier ABC',value:p.supplier_abc??''},{key:'description',label:'Product description',value:p.description},
+ {key:'ndc',label:'NDC11',value:p.ndc11,note:'Cannot change once referenced by inventory or barcode mappings.'},
+ {key:'status',label:'Status',type:'select',value:p.archived_at?'archived':'active',options:[{value:'active',label:'Active'},{value:'archived',label:'Archived'}]},
+ {label:'Permanent internal key',value:id,readonly:true},{label:'Created',value:fmtET(p.created_at),readonly:true},{label:'Version',value:p.version,readonly:true}],
+ onSubmit:async(v,reason)=>{
+ await api('/api/admin/product/update',{id,version:p.version,description:v.description,supplierAbc:v.abc,ndc11:v.ndc,archived:v.status==='archived',reason},adminHeaders());
+ await afterAdminSave('Library entry saved.');
+ }});
 }
 function editInventoryRow(r){
- const serialized=r.tracking_mode==='serialized',prod=data.products.find(p=>p.abc===r.product_abc);
- openEditor({title:serialized?'Edit vial record':'Edit lot record',info:r.description+' | GTIN '+r.gtin,
-  fields:[
-   {key:'description',label:'Product description',value:r.description,note:'This is the library entry: changing it renames the medication for ALL inventory that uses it.'},
-   {key:'scanned',label:'Scanned package NDC11',value:r.scanned_ndc11||''},
-   {key:'lot',label:'Lot number',value:r.lot},
-   ...(serialized?[{key:'serial',label:'Serial number',value:r.serial??''}]:[]),
-   {key:'expiration',label:'Expiration date (YYYY-MM-DD)',value:r.expiration},
-   ...(serialized?[{label:'In stock / Out',value:r.in_stock+' / '+r.out_quantity,readonly:true,note:'A serialized vial changes state only through Pull and Return scans.'}]
-    :[{key:'in_stock',label:'In stock quantity',type:'number',min:0,step:1,value:r.in_stock},{key:'out_quantity',label:'Out quantity',type:'number',min:0,step:1,value:r.out_quantity,note:'Quantity changes are saved as audited adjustments; scan history is never edited.'}]),
-   {label:'Tracking mode',value:r.tracking_mode,readonly:true},{label:'Status',value:r.status,readonly:true,note:'Derived from the quantities.'}],
-  onSubmit:async(v,reason)=>{
-   const ch={},diff=(a,b)=>String(a??'')!==String(b??'');
-   if(diff(v.lot.trim(),r.lot))ch.lot=v.lot.trim();
-   if(diff(v.expiration.trim(),r.expiration))ch.expiration=v.expiration.trim();
-   if(serialized&&diff(v.serial.trim(),r.serial))ch.serial=v.serial.trim();
-   if(diff(v.scanned.trim(),r.scanned_ndc11||''))ch.scannedNdc11=v.scanned.trim();
-   if(!serialized){const i=Number(v.in_stock),o=Number(v.out_quantity);if(v.in_stock===''||v.out_quantity===''||!Number.isInteger(i)||!Number.isInteger(o))throw Error('Quantities must be whole numbers.');if(i!==Number(r.in_stock))ch.inStock=i;if(o!==Number(r.out_quantity))ch.out=o;}
-   const descChanged=v.description.trim()!==r.description;
-   if(!Object.keys(ch).length&&!descChanged)throw Error('No changes to save.');
-   if(Object.keys(ch).length)await api('/api/admin/inventory/edit',{gtin:r.gtin,rawLot:r.raw_lot,rawExpiration:r.raw_expiration,rawSerial:serialized?r.raw_serial:null,changes:ch,expected:{lot:r.lot,expiration:r.expiration,serial:r.serial??'',in_stock:r.in_stock,out_quantity:r.out_quantity},reason},adminHeaders());
-   if(descChanged){if(!prod)throw Error('Library entry not found. Refresh and retry.');await api('/api/admin/product/update',{id:prod.abc,version:prod.version,description:v.description,supplierAbc:prod.supplier_abc??'',ndc11:prod.ndc11,reason},adminHeaders());}
-   await afterAdminSave('Inventory record saved.');}});
+ if(r.tracking_mode==='serialized'){toast('Serialized vial identity is locked. Use Pull/Return to change its state. Library descriptions are edited separately.',true);return;}
+ openEditor({title:'Edit lot quantities',info:r.description+' | GTIN '+r.gtin+' | Lot '+r.lot+' | Exp '+r.expiration+'. Barcode identity fields are locked; library changes are saved separately.',
+ fields:[{label:'Lot (barcode identity)',value:r.lot,readonly:true},{label:'Expiration (barcode identity)',value:r.expiration,readonly:true},
+ {label:'Scanned package NDC11',value:r.scanned_ndc11??'',readonly:true},
+ {key:'in_stock',label:'In stock quantity',type:'number',min:0,step:1,value:r.in_stock},
+ {key:'out_quantity',label:'Out quantity',type:'number',min:0,step:1,value:r.out_quantity}],
+ onSubmit:async(v,reason)=>{
+ if(v.in_stock===''||v.out_quantity==='')throw Error('Both quantities are required.');
+ const ti=Number(v.in_stock),to=Number(v.out_quantity);
+ if(!Number.isInteger(ti)||!Number.isInteger(to)||ti<0||to<0)throw Error('Quantities must be nonnegative integers.');
+ await api('/api/admin/inventory/edit',{gtin:r.gtin,rawLot:r.raw_lot,rawExpiration:r.raw_expiration,rawSerial:null,
+ changes:{inStock:ti,out:to},expected:{in_stock:Number(r.in_stock),out_quantity:Number(r.out_quantity)},reason},adminHeaders());
+ await afterAdminSave('Inventory quantities saved.');
+ }});
 }
 // Administration (More tab)
 function adminMsg(text,error=false){$('adminStatus').textContent=text;$('adminStatus').className=error?'status error':'status ok';}
