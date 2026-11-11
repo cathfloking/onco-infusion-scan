@@ -1,8 +1,8 @@
 import {need,parseScan,ndcCandidates,productRow,manualNDC,publicProduct} from './parser.js';
 import {contextFor,resolveProduct,requestRecord,aliasDisabled} from './matching.js';
 import {SERIAL_INVENTORY,LOT_INVENTORY,SERIAL_ACTIVITY,LOT_ACTIVITY,ADJ_ACTIVITY} from './queries.js';
-import {adminActor,adminData,updateProduct,setArchived,setAliasEnabled,adjustInventory} from './admin.js';
-const VERSION='prototype-0.6.0';
+import {adminActor,adminData,updateProduct,setArchived,setAliasEnabled,adjustInventory,editInventory} from './admin.js';
+const VERSION='prototype-0.7.0';
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY'}});
 async function hash(s){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))).map(v=>v.toString(16).padStart(2,'0')).join('');}
 async function authorized(r,e){return await hash(r.headers.get('Authorization')||'')===await hash('Basic '+btoa(e.APP_USER+':'+e.APP_PASSWORD));}
@@ -48,6 +48,7 @@ async function adminRoute(db,actor,path,b){
  if(path==='/api/admin/product/archive')return setArchived(db,actor,b);
  if(path==='/api/admin/alias/enabled')return setAliasEnabled(db,actor,b);
  if(path==='/api/admin/inventory/adjust')return adjustInventory(db,actor,b);
+ if(path==='/api/admin/inventory/edit')return editInventory(db,actor,b);
  return null;
 }
 export default{
