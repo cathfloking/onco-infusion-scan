@@ -1,6 +1,6 @@
 # OncoScan — Oncology Infusion Scanner
 
-Scan-based inventory tracking for oncology infusion medications. OncoScan records receiving, pulls and returns by lot, expiration and serial number, and keeps a complete activity record. Scan with a USB barcode scanner on a PC, or with the camera on a phone or tablet.
+Scan-based inventory tracking for oncology infusion medications. OncoScan records receiving, pulls and returns by lot, expiration and serial number, and keeps a complete activity record. Scan with a USB barcode scanner on a PC, or with the camera on a phone or tablet. DS1 DataMatrix code is used as the source of the above information.
 
 > **Status:** Prototype (`prototype-0.7.0`). Not validated for regulated production use. No DSCSA or other regulatory compliance is claimed.
 
