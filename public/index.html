@@ -1,29 +1,117 @@
 <!doctype html><html lang="en"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Oncology Infusion Scanner</title><link rel="stylesheet" href="/styles.css">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f8f86"><title>Onco Scan</title>
+<link rel="stylesheet" href="/styles.css"><script src="/theme.js"></script>
 <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script><script defer src="/app.js"></script>
-</head><body><h1>Oncology Infusion Scanner</h1>
-<p class="notice">Test prototype — no patient information. One individual vial per scan. Shared sign-in; no individual user attribution. Manufacturer expiration warnings are not hard stops.</p>
-<p class="version">prototype-0.3.0 · Serialized and nonserialized inventory</p>
-<section><h2>1. Drug library</h2><p>Supplier report columns: ABC #, Product Description, NDC. Numeric formatting is normalized to your supplier's 11-digit format.</p>
-<input id="file" type="file" accept=".xlsx"><button id="preview">Preview file</button><button id="import" disabled>Import previewed rows</button><pre id="previewText">No file selected.</pre></section>
-<section><h2>2. Scan</h2><label>Action <select id="action"><option value="RECEIVE">Receive</option><option value="PULL">Pull</option><option value="RETURN">Return</option></select></label>
-<form id="scanForm"><label>Scan here <input id="raw" type="text" autocomplete="off" spellcheck="false"></label><button id="save" type="submit">Save scan</button><button id="diagnose" type="button">Diagnose only</button></form>
-<p id="status" role="status" aria-live="polite"></p><p id="lastProduct"></p>
-<details><summary>Diagnostics / sample input</summary><button id="sampleSerialized" type="button">Load methotrexate (no save)</button><button id="sampleLot" type="button">Load sodium phosphate (no save)</button><pre id="diagnostic">No scan yet.</pre></details>
-<div id="unknown" hidden><h3>Resolve unknown medication/package</h3><p id="unknownDetails"></p>
+</head><body>
+<svg class="sprite" aria-hidden="true" focusable="false"><symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol><symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></symbol><symbol id="i-scan" viewBox="0 0 24 24"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><path d="M8 8.5v7M11 8.5v7M13.5 8.5v7M16 8.5v7"/></symbol><symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol><symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></symbol><symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol></svg>
+<header class="top">
+<a class="brand" href="#home" aria-label="Onco Scan home"><svg class="logo" viewBox="0 0 40 24" aria-hidden="true"><polyline points="1,13 9,13 13,4 19,21 24,9 27,13 39,13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="brand-text"><b>Onco</b><span>Scan</span></span></a>
+<button id="pill" class="pill" type="button" aria-label="Refresh data"><span id="dot" class="dot"></span><span id="updated">Loading...</span></button>
+<button id="gear" class="iconbtn" type="button" aria-label="Settings" aria-expanded="false" aria-controls="settings"><svg class="ico" aria-hidden="true"><use href="#i-gear"/></svg></button>
+</header>
+<div id="settings" class="popover" hidden><h2>Settings</h2><p class="muted">Appearance</p>
+<div class="seg" role="group" aria-label="Theme"><button type="button" data-theme-choice="light">&#9728;&#65039; Light</button><button type="button" data-theme-choice="dark">&#127769; Dark</button><button type="button" data-theme-choice="auto">&#128250; Auto</button></div></div>
+<main>
+<section class="view" id="view-home">
+<h1 class="hero">Every vial,<br>accounted for.</h1>
+<p class="lede">Scan-first inventory for oncology infusion. Receive, pull and return one vial at a time.</p>
+<div class="cards">
+<a class="card card-scan span-wide" href="#scan"><div class="card-head"><span class="emoji" aria-hidden="true">&#128247;</span><h2>Scan</h2><span class="chev" aria-hidden="true">&#8250;</span></div><p class="big small-big">Receive &middot; Pull &middot; Return</p><p class="muted">One individual vial per scan. Tap to start scanning.</p></a>
+<a class="card span-wide" href="#inventory"><div class="card-head"><span class="emoji" aria-hidden="true">&#128230;</span><h2>Inventory</h2><span class="chev" aria-hidden="true">&#8250;</span></div><p class="big"><span id="hIn">-</span> <span class="unit">in stock</span></p>
+<p class="muted"><b id="hOut">-</b> Out &nbsp;|&nbsp; <b id="hExp">-</b> expiring within 90 days</p><p id="hExpired" class="warn" hidden></p></a>
+<a class="card" href="#activity"><div class="card-head"><span class="emoji" aria-hidden="true">&#128339;</span><h2>Activity</h2><span class="chev" aria-hidden="true">&#8250;</span></div><p class="big small-big" id="hLast">-</p><p class="muted" id="hToday"></p></a>
+<a class="card" href="#library"><div class="card-head"><span class="emoji" aria-hidden="true">&#128138;</span><h2>Drug library</h2><span class="chev" aria-hidden="true">&#8250;</span></div><p class="big"><span id="hLib">-</span> <span class="unit">entries</span></p><p class="muted" id="hArchived"></p></a>
+<a class="card span-wide" href="#more"><div class="card-head"><span class="emoji" aria-hidden="true">&#128736;&#65039;</span><h2>More</h2><span class="chev" aria-hidden="true">&#8250;</span></div><p class="big small-big">Admin tools &amp; about</p><p class="muted" id="hAdmin">Admin tools locked</p></a>
+</div></section>
+
+<section class="view" id="view-scan" hidden>
+<h1 class="page-title">Scan</h1>
+<div class="panel">
+<div class="seg seg-action" role="radiogroup" aria-label="Action">
+<label><input type="radio" name="action" value="RECEIVE" checked><span>&#128229; Receive</span></label>
+<label><input type="radio" name="action" value="PULL"><span>&#128228; Pull</span></label>
+<label><input type="radio" name="action" value="RETURN"><span>&#8617;&#65039; Return</span></label></div>
+<form id="scanForm"><label class="field">Scan here<input id="raw" type="text" autocomplete="off" spellcheck="false" autocapitalize="off" inputmode="text"></label>
+<div class="row"><button id="save" class="btn primary" type="submit">Save scan</button><button id="diagnose" class="btn" type="button">Diagnose only</button></div></form>
+<p id="status" class="status" role="status" aria-live="polite"></p><p id="lastProduct" class="result"></p>
+<details><summary>Diagnostics / sample input</summary><div class="row"><button id="sampleSerialized" class="btn small" type="button">Load methotrexate (no save)</button><button id="sampleLot" class="btn small" type="button">Load sodium phosphate (no save)</button></div><pre id="diagnostic">No scan yet.</pre></details>
+<div id="unknown" class="callout" hidden><h3>Resolve unknown medication/package</h3><p id="unknownDetails"></p>
 <details id="aliasPanel"><summary>Existing medication, different package NDC: establish a vial alias</summary>
 <form id="aliasForm"><p>Only for a verified individual-vial versus supplier-pack relationship. Every scan will count as ONE vial; do not link a carton barcode as if it were one vial.</p>
-<label>Supplier library entry <select id="aliasProduct" required><option value="">Choose candidate</option></select></label>
-<label>Scanned vial NDC11 <select id="aliasNDC" required></select></label>
-<label>Verification source / reason <input id="aliasReason" type="text" required minlength="8" maxlength="500" placeholder="Example: vial/carton labeling confirms same 5 mL vial"></label>
-<button id="addAlias" type="submit">Save verified package alias</button></form></details>
+<label class="field">Supplier library entry <select id="aliasProduct" required><option value="">Choose candidate</option></select></label>
+<label class="field">Scanned vial NDC11 <select id="aliasNDC" required></select></label>
+<label class="field">Verification source / reason <input id="aliasReason" type="text" required minlength="8" maxlength="500" placeholder="Example: vial/carton labeling confirms same 5 mL vial"></label>
+<button id="addAlias" class="btn primary" type="submit">Save verified package alias</button></form></details>
 <details><summary>Medication is genuinely absent: add a library entry</summary>
-<form id="productForm"><label>Medication, strength and package description <input id="newDescription" type="text" required maxlength="300"></label>
-<label>Scanned package NDC11 <input id="newNDC" type="text" required list="ndcOptions"></label><datalist id="ndcOptions"></datalist>
-<label>ABC # (optional) <input id="newABC" type="text" inputmode="numeric"></label><button id="addProduct" type="submit">Add library entry</button></form></details>
-<p>Saving a library entry or alias does not receive inventory. Press Save scan afterward.</p><button id="cancelUnknown" type="button">Cancel</button></div>
+<form id="productForm"><label class="field">Medication, strength and package description <input id="newDescription" type="text" required maxlength="300"></label>
+<label class="field">Scanned package NDC11 <input id="newNDC" type="text" required list="ndcOptions"></label><datalist id="ndcOptions"></datalist>
+<label class="field">ABC # (optional) <input id="newABC" type="text" inputmode="numeric"></label><button id="addProduct" class="btn primary" type="submit">Add library entry</button></form></details>
+<p>Saving a library entry or alias does not receive inventory. Press Save scan afterward.</p><button id="cancelUnknown" class="btn" type="button">Cancel</button></div>
+</div></section>
+
+<section class="view" id="view-inventory" hidden>
+<h1 class="page-title">Inventory</h1>
+<div class="panel"><div class="row"><button id="refresh" class="btn" type="button">Refresh</button><button id="export" class="btn" type="button">Export Excel</button></div>
+<div class="row"><label class="field grow">Search<input id="search" type="text" placeholder="Medication, NDC, lot, serial..."></label>
+<label class="field">Filter<select id="filter"><option value="">All</option><option value="in">Has In-stock quantity</option><option value="out">Has Out quantity</option></select></label></div>
+<p id="count" class="muted"></p><div id="inventory" class="scroll"></div></div></section>
+
+<section class="view" id="view-activity" hidden>
+<h1 class="page-title">Recent activity</h1>
+<div class="panel"><p class="muted">Latest 100 scans. Times shown in UTC.</p><div id="activity" class="scroll"></div></div></section>
+
+<section class="view" id="view-library" hidden>
+<a class="back" href="#more">&#8249; More</a><h1 class="page-title">Drug library</h1>
+<div class="panel"><label class="field">Search<input id="libSearch" type="text" placeholder="Description, NDC, supplier ABC"></label>
+<label class="check"><input id="libArchived" type="checkbox"> Show archived entries</label>
+<p id="libCount" class="muted"></p><div id="library" class="scroll"></div>
+<p class="muted">Library changes and uploads are available to administrators under More.</p></div></section>
+
+<section class="view" id="view-more" hidden>
+<h1 class="page-title">More</h1>
+<a class="row-card" href="#library"><span class="emoji" aria-hidden="true">&#128138;</span><span>Drug library</span><span class="chev" aria-hidden="true">&#8250;</span></a>
+<div class="card admin-card" id="adminCard">
+<div id="adminLocked"><div class="card-head"><span class="emoji" aria-hidden="true">&#128272;</span><h2>Administrator</h2></div>
+<p class="muted">Sign in to manage the drug library, package aliases and library uploads.</p>
+<form id="adminForm"><label class="field">Administrator user<input id="adminUser" type="text" autocomplete="off" required></label>
+<label class="field">Administrator password<input id="adminPass" type="password" autocomplete="off" required></label>
+<button class="btn primary" type="submit">Unlock administration</button></form></div>
+<div id="adminOpen" hidden><div class="card-head"><span class="emoji" aria-hidden="true">&#128275;</span><h2>Administrator unlocked</h2></div>
+<p class="muted">Changes are audited with a reason. The interim shared credential cannot identify an individual.</p>
+<div class="row"><button id="adminLock" class="btn" type="button">Lock administration</button><button id="adminReload" class="btn" type="button">Refresh</button></div>
+<div class="seg seg-tabs" role="group" aria-label="Administration sections"><button type="button" data-atab="lib" class="on">Library</button><button type="button" data-atab="alias">Aliases</button><button type="button" data-atab="audit">Audit</button><button type="button" data-atab="import">Upload</button></div>
+<div id="atab-lib"><p class="muted">NDC and the internal key cannot be edited because they control scan matching. To correct an NDC, archive the entry and add a new one during Receive. Description edits also change how older activity is displayed.</p>
+<label class="field">Search<input id="aLibSearch" type="text" placeholder="Description, NDC, supplier ABC"></label><label class="check"><input id="aShowArchived" type="checkbox"> Show archived</label>
+<div id="aLibTable" class="scroll"></div>
+<form id="editForm" class="callout" hidden><h3>Edit library entry</h3><p id="editInfo"></p>
+<label class="field">Description<input id="editDescription" type="text" required maxlength="300"></label>
+<label class="field">Supplier ABC (digits, or blank)<input id="editAbc" type="text" inputmode="numeric" maxlength="30"></label>
+<label class="field">Reason for change (8-500 characters)<input id="editReason" type="text" required minlength="8" maxlength="500"></label>
+<div class="row"><button id="saveEdit" class="btn primary" type="submit">Save changes</button><button id="toggleArchive" class="btn" type="button"></button><button id="cancelEdit" class="btn" type="button">Cancel</button></div>
+<p class="muted">Archived entries block new Receives. Existing stock can still be Pulled and Returned.</p></form></div>
+<div id="atab-alias" hidden><p class="muted">A disabled alias stops future matching and Receive for that exact GTIN, with no fallback to any other match. Recorded inventory keeps its association and can still be Pulled or Returned.</p>
+<div id="aliasTable" class="scroll"></div>
+<form id="aliasEditForm" class="callout" hidden><h3 id="aliasTitle"></h3><p id="aliasInfo"></p>
+<label class="field">Reason for change (8-500 characters)<input id="aliasEditReason" type="text" required minlength="8" maxlength="500"></label>
+<div class="row"><button id="saveAlias" class="btn primary" type="submit"></button><button id="cancelAlias" class="btn" type="button">Cancel</button></div></form></div>
+<div id="atab-audit" hidden><p class="muted">Latest 200 changes. Times in UTC.</p><div id="auditTable" class="scroll"></div></div>
+<div id="atab-import" hidden><p class="muted">Supplier report columns: ABC #, Product Description, NDC. Numeric formatting is normalized to the supplier's 11-digit format. Imports are additive and never overwrite edited entries.</p>
+<input id="file" type="file" accept=".xlsx"><div class="row"><button id="preview" class="btn" type="button">Preview file</button><button id="import" class="btn primary" type="button" disabled>Import previewed rows</button></div><pre id="previewText">No file selected.</pre></div>
+<p id="adminStatus" class="status" role="status" aria-live="polite"></p></div>
+<p id="adminLockedStatus" class="status" role="status" aria-live="polite"></p>
+</div>
+<div class="card about"><div class="card-head"><span class="emoji" aria-hidden="true">&#8505;&#65039;</span><h2>About</h2></div>
+<p class="muted">Test prototype. No patient information. One individual vial per scan. Technician sign-in is shared and does not identify individuals. Manufacturer expiration warnings are not hard stops. This is internal inventory tracking, not complete DSCSA compliance.</p>
+<p class="muted" id="versionText"></p></div>
 </section>
-<section><h2>3. Inventory</h2><button id="refresh">Refresh</button><button id="export">Export Excel</button>
-<label>Search <input id="search" type="text" placeholder="Medication, NDC, lot, serial..."></label><label>Filter <select id="filter"><option value="">All</option><option value="in">Has In-stock quantity</option><option value="out">Has Out quantity</option></select></label>
-<p id="count"></p><div id="inventory" class="scroll"></div></section><section><h2>Recent activity</h2><div id="activity" class="scroll"></div></section></body></html>
+</main>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<nav class="dock" aria-label="Main">
+<a href="#home" data-tab="home"><svg class="ico" aria-hidden="true"><use href="#i-home"/></svg><span>Home</span></a>
+<a href="#inventory" data-tab="inventory"><svg class="ico" aria-hidden="true"><use href="#i-box"/></svg><span>Inventory</span></a>
+<a href="#scan" data-tab="scan" class="scan"><span class="bubble"><svg class="ico" aria-hidden="true"><use href="#i-scan"/></svg></span><span>Scan</span></a>
+<a href="#activity" data-tab="activity"><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg><span>Activity</span></a>
+<a href="#more" data-tab="more"><svg class="ico" aria-hidden="true"><use href="#i-more"/></svg><span>More</span></a>
+</nav>
+</body></html>
