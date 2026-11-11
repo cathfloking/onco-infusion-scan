@@ -54,46 +54,45 @@
 <div class="panel"><div class="row"><button id="refresh" class="btn" type="button">Refresh</button><button id="export" class="btn excel" type="button">Export Excel</button></div>
 <div class="row"><label class="field grow">Search<input id="search" type="text" placeholder="Medication, NDC, lot, serial..."></label>
 <label class="field">Filter<select id="filter"><option value="">All</option><option value="in">Has In-stock quantity</option><option value="out">Has Out quantity</option></select></label></div>
+<p class="muted hint">Click a column heading to sort.<span id="adminEditHint"> Administrators can edit any row.</span></p>
 <p id="count" class="muted"></p><div id="inventory" class="scroll"></div></div></section>
 
 <section class="view" id="view-activity" hidden>
 <h1 class="page-title">Recent activity</h1>
-<div class="panel"><p class="muted">Latest 100 entries. Times shown in Eastern time (EST/EDT).</p><div id="activity" class="scroll"></div></div></section>
+<div class="panel"><div class="row"><label class="field grow">Search<input id="actSearch" type="text" placeholder="Medication, lot, serial, action..."></label>
+<label class="field">Action<select id="actFilter"><option value="">All</option><option value="RECEIVE">Receive</option><option value="PULL">Pull</option><option value="RETURN">Return</option><option value="ADJUST">Adjustments</option></select></label></div>
+<p class="muted hint">Latest 100 entries as originally scanned. Times in Eastern time (EST/EDT). Click a heading to sort.</p><div id="activity" class="scroll"></div></div></section>
 
 <section class="view" id="view-more" hidden>
 <h1 class="page-title">More</h1>
 <div class="card acc" id="libAcc">
-<button id="libToggle" class="acc-head" type="button" aria-expanded="false" aria-controls="libBody"><span class="emoji" aria-hidden="true">&#128138;</span><span class="acc-title">Drug library<small id="libSummary" class="muted"></small></span><span class="chev" aria-hidden="true">&#8250;</span></button>
-<div id="libBody" hidden><div class="row"><button id="exportLib" class="btn excel" type="button">Export Excel</button></div>
+<div class="acc-row"><button id="libToggle" class="acc-head" type="button" aria-expanded="false" aria-controls="libBody"><span class="emoji" aria-hidden="true">&#128138;</span><span class="acc-title">Drug library<small id="libSummary" class="muted"></small></span></button>
+<button id="exportLib" class="btn excel" type="button">Export Excel</button>
+<button id="libChev" class="chev acc-chev" type="button" aria-label="Expand or collapse drug library" aria-expanded="false" aria-controls="libBody">&#8250;</button></div>
+<div id="libBody" class="acc-body"><div class="acc-inner"><div class="acc-pad">
 <label class="field">Search<input id="libSearch" type="text" placeholder="Description, NDC, supplier ABC"></label>
 <label class="check"><input id="libArchived" type="checkbox"> Show archived entries</label>
 <p id="libCount" class="muted"></p><div id="library" class="scroll"></div>
-<p class="muted">Library changes and uploads are available to administrators below.</p></div></div>
+<p class="muted">Click a heading to sort. Administrators can edit entries after unlocking below.</p></div></div></div></div>
 <div class="card admin-card" id="adminCard">
 <div id="adminLocked"><div class="card-head"><span class="emoji" aria-hidden="true">&#128272;</span><h2>Administrator</h2></div>
-<p class="muted">Sign in to manage the drug library, package aliases, quantities and library uploads.</p>
+<p class="muted">Sign in to edit the drug library, package aliases, inventory records and quantities, and to upload libraries.</p>
 <form id="adminForm"><label class="field">Administrator user<input id="adminUser" type="text" autocomplete="off" required></label>
 <label class="field">Administrator password<input id="adminPass" type="password" autocomplete="off" required></label>
 <button class="btn primary" type="submit">Unlock administration</button></form></div>
 <div id="adminOpen" hidden><div class="card-head"><span class="emoji" aria-hidden="true">&#128275;</span><h2>Administrator unlocked</h2></div>
-<p class="muted">Changes are audited with a reason. The interim shared credential cannot identify an individual.</p>
+<p class="muted">Changes are audited with a reason. The interim shared credential cannot identify an individual. Inventory rows and library entries now show an Edit button.</p>
 <div class="row"><button id="adminLock" class="btn" type="button">Lock administration</button><button id="adminReload" class="btn" type="button">Refresh</button></div>
 <div class="seg seg-tabs" role="group" aria-label="Administration sections"><button type="button" data-atab="lib" class="on">Library</button><button type="button" data-atab="alias">Aliases</button><button type="button" data-atab="stock">Quantities</button><button type="button" data-atab="audit">Audit</button><button type="button" data-atab="import">Upload</button></div>
-<div id="atab-lib"><p class="muted">NDC and the internal key cannot be edited because they control scan matching. To correct an NDC, archive the entry and add a new one during Receive. Description edits also change how older activity is displayed.</p>
+<div id="atab-lib"><p class="muted">Every column can be edited. The NDC can change only while no inventory, alias or mapping uses the entry; otherwise archive it and add a corrected entry.</p>
 <label class="field">Search<input id="aLibSearch" type="text" placeholder="Description, NDC, supplier ABC"></label><label class="check"><input id="aShowArchived" type="checkbox"> Show archived</label>
-<div id="aLibTable" class="scroll"></div>
-<form id="editForm" class="callout" hidden><h3>Edit library entry</h3><p id="editInfo"></p>
-<label class="field">Description<input id="editDescription" type="text" required maxlength="300"></label>
-<label class="field">Supplier ABC (digits, or blank)<input id="editAbc" type="text" inputmode="numeric" maxlength="30"></label>
-<label class="field">Reason for change (8-500 characters)<input id="editReason" type="text" required minlength="8" maxlength="500"></label>
-<div class="row"><button id="saveEdit" class="btn primary" type="submit">Save changes</button><button id="toggleArchive" class="btn" type="button"></button><button id="cancelEdit" class="btn" type="button">Cancel</button></div>
-<p class="muted">Archived entries block new Receives. Existing stock can still be Pulled and Returned.</p></form></div>
+<div id="aLibTable" class="scroll"></div></div>
 <div id="atab-alias" hidden><p class="muted">A disabled alias stops future matching and Receive for that exact GTIN, with no fallback to any other match. Recorded inventory keeps its association and can still be Pulled or Returned.</p>
 <div id="aliasTable" class="scroll"></div>
 <form id="aliasEditForm" class="callout" hidden><h3 id="aliasTitle"></h3><p id="aliasInfo"></p>
 <label class="field">Reason for change (8-500 characters)<input id="aliasEditReason" type="text" required minlength="8" maxlength="500"></label>
 <div class="row"><button id="saveAlias" class="btn primary" type="submit"></button><button id="cancelAlias" class="btn" type="button">Cancel</button></div></form></div>
-<div id="atab-stock" hidden><p class="muted">Add or remove quantity for a nonserialized lot (for example after a physical count). Each change is a separate audited adjustment: scan history is never edited, and a quantity can never go below zero. Serialized vials are not adjusted here.</p>
+<div id="atab-stock" hidden><p class="muted">Quick quantity adjustments for a nonserialized lot. Each change is a separate audited adjustment and a quantity can never go below zero. You can also change quantities with Edit on the Inventory tab.</p>
 <label class="field">Search<input id="aStockSearch" type="text" placeholder="Medication, lot, expiration"></label>
 <div id="stockTable" class="scroll"></div>
 <form id="adjForm" class="callout" hidden><h3>Adjust quantity</h3><p id="adjInfo"></p>
@@ -113,6 +112,13 @@
 <p class="muted" id="versionText"></p></div>
 </section>
 </main>
+<dialog id="editor" aria-labelledby="editorTitle"><form id="editorForm" novalidate>
+<h2 id="editorTitle"></h2><p id="editorInfo" class="muted"></p>
+<div id="editorFields"></div>
+<label class="field">Reason for change (8-500 characters)<input id="editorReason" type="text" required minlength="8" maxlength="500" autocomplete="off"></label>
+<p id="editorError" class="status error" role="alert"></p>
+<div class="row"><button id="editorSave" class="btn primary" type="submit">Save changes</button><button id="editorCancel" class="btn" type="button">Cancel</button></div>
+</form></dialog>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <nav class="dock" aria-label="Main"><span id="dockInd" class="dock-ind" aria-hidden="true"></span>
 <a href="#home" data-tab="home"><svg class="ico" aria-hidden="true"><use href="#i-home"/></svg><span class="lbl">Home</span></a>
