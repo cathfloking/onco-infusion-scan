@@ -50,8 +50,20 @@ async function loadEngine() {
   if (engine) return engine;
   let lastError;
   for (const url of ENGINE_URLS) {
-    try { const m = await import(url); if (typeof m.readBarcodes === 'function') { engine = m; return m; } }
-    catch (e) { lastError = e; }
+    try {
+      const m = await import(url);
+      if (typeof m.readBarcodes === 'function') {
+        // The package's default .wasm host (fastly.jsdelivr.net) is outside our CSP; use cdn.jsdelivr.net instead.
+        if (typeof m.prepareZXingModule === 'function') {
+          const ver = m.ZXING_WASM_VERSION || ENGINE_VERSION;
+          m.prepareZXingModule({ overrides: { locateFile: (path, prefix) => {
+            const k = path.match(/_(.+?)\.wasm$/);
+            return k ? 'https://cdn.jsdelivr.net/npm/zxing-wasm@' + ver + '/dist/' + k[1] + '/' + path : prefix + path;
+          } } });
+        }
+        engine = m; return m;
+      }
+    } catch (e) { lastError = e; }
   }
   throw new Error('Scanner engine did not load (' + (lastError && lastError.message || 'unknown') + ').');
 }
@@ -85,7 +97,7 @@ function actionLabel() {
 function addRow(label, value, mono) { const dt = el('dt', '', label), dd = el('dd', mono ? 'cs-mono' : '', value); sheetBody.append(dt, dd); }
 
 async function open() {
-  build(); audio = audio || null; beep(1, 1);
+  build(); beep(1, 1);
   overlay.hidden = false; document.body.classList.add('cs-open');
   const raw = $('raw'); if (raw) { savedInputMode = raw.inputMode; raw.inputMode = 'none'; }
   hint.textContent = 'Starting camera...'; sheet.hidden = true; paused = false;
@@ -174,9 +186,7 @@ async function onDetect(text) {
 async function onConfirm() {
   if (!current || !current.info) return;
   const raw = $('raw');
-  if (!current.ok) { // unknown product: use the existing resolution panel
-    raw.value = current.text; const t = current.text; close(); $('diagnose').click(); void t; return;
-  }
+  if (!current.ok) { raw.value = current.text; close(); $('diagnose').click(); return; }
   btnConfirm.disabled = true; btnRescan.disabled = true; sheetTitle.textContent = 'Saving...';
   raw.value = current.text;
   $('scanForm').requestSubmit();
@@ -188,9 +198,9 @@ async function onConfirm() {
   addRow('Result', st.textContent || '(no message)');
   if (ok) { haptic('success'); beep(1175, 90); } else { haptic('error'); beep(220, 220); }
   btnRescan.disabled = false; btnRescan.textContent = 'Scan next vial';
-  btnConfirm.textContent = 'Done'; btnConfirm.disabled = false; btnConfirm.onclick = () => { btnConfirm.onclick = () => onConfirm(); btnRescan.textContent = 'Rescan'; close(); };
-  const origResume = btnRescan.onclick;
-  btnRescan.onclick = () => { btnRescan.onclick = origResume; btnConfirm.onclick = () => onConfirm(); btnRescan.textContent = 'Rescan'; resume(); };
+  btnConfirm.textContent = 'Done'; btnConfirm.disabled = false;
+  btnConfirm.onclick = () => { btnConfirm.onclick = () => onConfirm(); btnRescan.onclick = resume; btnRescan.textContent = 'Rescan'; close(); };
+  btnRescan.onclick = () => { btnConfirm.onclick = () => onConfirm(); btnRescan.onclick = resume; btnRescan.textContent = 'Rescan'; resume(); };
 }
 
 // ---------- Entry button on the Scan screen ----------
