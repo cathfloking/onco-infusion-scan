@@ -7,7 +7,6 @@
 <svg class="sprite" aria-hidden="true" focusable="false"><symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol><symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></symbol><symbol id="i-scan" viewBox="0 0 24 24"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><path d="M8 8.5v7M11 8.5v7M13.5 8.5v7M16 8.5v7"/></symbol><symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol><symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></symbol><symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol></svg>
 <header class="top">
 <a class="brand" href="#home" aria-label="OncoScan home"><svg class="logo" viewBox="0 0 40 24" aria-hidden="true"><polyline points="1,13 9,13 13,4 19,21 24,9 27,13 39,13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="brand-text"><b>Onco</b><span>Scan</span></span></a>
-<button id="pill" class="pill" type="button" aria-label="Refresh data"><span id="dot" class="dot"></span><span id="updated">Loading...</span></button>
 <button id="gear" class="iconbtn" type="button" aria-label="Settings" aria-expanded="false" aria-controls="settings"><svg class="ico" aria-hidden="true"><use href="#i-gear"/></svg></button>
 </header>
 <div id="settings" class="popover" hidden><h2>Settings</h2><p class="muted">Appearance</p>
@@ -52,33 +51,34 @@
 
 <section class="view" id="view-inventory" hidden>
 <h1 class="page-title">Inventory</h1>
-<div class="panel"><div class="row"><button id="refresh" class="btn" type="button">Refresh</button><button id="export" class="btn" type="button">Export Excel</button></div>
+<div class="panel"><div class="row"><button id="refresh" class="btn" type="button">Refresh</button><button id="export" class="btn excel" type="button">Export Excel</button></div>
 <div class="row"><label class="field grow">Search<input id="search" type="text" placeholder="Medication, NDC, lot, serial..."></label>
 <label class="field">Filter<select id="filter"><option value="">All</option><option value="in">Has In-stock quantity</option><option value="out">Has Out quantity</option></select></label></div>
 <p id="count" class="muted"></p><div id="inventory" class="scroll"></div></div></section>
 
 <section class="view" id="view-activity" hidden>
 <h1 class="page-title">Recent activity</h1>
-<div class="panel"><p class="muted">Latest 100 scans. Times shown in UTC.</p><div id="activity" class="scroll"></div></div></section>
+<div class="panel"><p class="muted">Latest 100 entries. Times shown in Eastern time (EST/EDT).</p><div id="activity" class="scroll"></div></div></section>
 
 <section class="view" id="view-more" hidden>
 <h1 class="page-title">More</h1>
 <div class="card acc" id="libAcc">
 <button id="libToggle" class="acc-head" type="button" aria-expanded="false" aria-controls="libBody"><span class="emoji" aria-hidden="true">&#128138;</span><span class="acc-title">Drug library<small id="libSummary" class="muted"></small></span><span class="chev" aria-hidden="true">&#8250;</span></button>
-<div id="libBody" hidden><label class="field">Search<input id="libSearch" type="text" placeholder="Description, NDC, supplier ABC"></label>
+<div id="libBody" hidden><div class="row"><button id="exportLib" class="btn excel" type="button">Export Excel</button></div>
+<label class="field">Search<input id="libSearch" type="text" placeholder="Description, NDC, supplier ABC"></label>
 <label class="check"><input id="libArchived" type="checkbox"> Show archived entries</label>
 <p id="libCount" class="muted"></p><div id="library" class="scroll"></div>
 <p class="muted">Library changes and uploads are available to administrators below.</p></div></div>
 <div class="card admin-card" id="adminCard">
 <div id="adminLocked"><div class="card-head"><span class="emoji" aria-hidden="true">&#128272;</span><h2>Administrator</h2></div>
-<p class="muted">Sign in to manage the drug library, package aliases and library uploads.</p>
+<p class="muted">Sign in to manage the drug library, package aliases, quantities and library uploads.</p>
 <form id="adminForm"><label class="field">Administrator user<input id="adminUser" type="text" autocomplete="off" required></label>
 <label class="field">Administrator password<input id="adminPass" type="password" autocomplete="off" required></label>
 <button class="btn primary" type="submit">Unlock administration</button></form></div>
 <div id="adminOpen" hidden><div class="card-head"><span class="emoji" aria-hidden="true">&#128275;</span><h2>Administrator unlocked</h2></div>
 <p class="muted">Changes are audited with a reason. The interim shared credential cannot identify an individual.</p>
 <div class="row"><button id="adminLock" class="btn" type="button">Lock administration</button><button id="adminReload" class="btn" type="button">Refresh</button></div>
-<div class="seg seg-tabs" role="group" aria-label="Administration sections"><button type="button" data-atab="lib" class="on">Library</button><button type="button" data-atab="alias">Aliases</button><button type="button" data-atab="audit">Audit</button><button type="button" data-atab="import">Upload</button></div>
+<div class="seg seg-tabs" role="group" aria-label="Administration sections"><button type="button" data-atab="lib" class="on">Library</button><button type="button" data-atab="alias">Aliases</button><button type="button" data-atab="stock">Quantities</button><button type="button" data-atab="audit">Audit</button><button type="button" data-atab="import">Upload</button></div>
 <div id="atab-lib"><p class="muted">NDC and the internal key cannot be edited because they control scan matching. To correct an NDC, archive the entry and add a new one during Receive. Description edits also change how older activity is displayed.</p>
 <label class="field">Search<input id="aLibSearch" type="text" placeholder="Description, NDC, supplier ABC"></label><label class="check"><input id="aShowArchived" type="checkbox"> Show archived</label>
 <div id="aLibTable" class="scroll"></div>
@@ -93,11 +93,20 @@
 <form id="aliasEditForm" class="callout" hidden><h3 id="aliasTitle"></h3><p id="aliasInfo"></p>
 <label class="field">Reason for change (8-500 characters)<input id="aliasEditReason" type="text" required minlength="8" maxlength="500"></label>
 <div class="row"><button id="saveAlias" class="btn primary" type="submit"></button><button id="cancelAlias" class="btn" type="button">Cancel</button></div></form></div>
-<div id="atab-audit" hidden><p class="muted">Latest 200 changes. Times in UTC.</p><div id="auditTable" class="scroll"></div></div>
+<div id="atab-stock" hidden><p class="muted">Add or remove quantity for a nonserialized lot (for example after a physical count). Each change is a separate audited adjustment: scan history is never edited, and a quantity can never go below zero. Serialized vials are not adjusted here.</p>
+<label class="field">Search<input id="aStockSearch" type="text" placeholder="Medication, lot, expiration"></label>
+<div id="stockTable" class="scroll"></div>
+<form id="adjForm" class="callout" hidden><h3>Adjust quantity</h3><p id="adjInfo"></p>
+<div class="row"><label class="field">Change<select id="adjMode"><option value="add">Add</option><option value="remove">Remove</option></select></label>
+<label class="field">Applies to<select id="adjBucket"><option value="IN_STOCK">In stock</option><option value="OUT">Out</option></select></label>
+<label class="field">Quantity<input id="adjQty" type="number" min="1" max="1000" step="1" value="1" required></label></div>
+<label class="field">Reason (8-500 characters)<input id="adjReason" type="text" required minlength="8" maxlength="500" placeholder="Example: physical count found 2 fewer vials"></label>
+<div class="row"><button id="saveAdj" class="btn primary" type="submit">Save adjustment</button><button id="cancelAdj" class="btn" type="button">Cancel</button></div></form></div>
+<div id="atab-audit" hidden><p class="muted">Latest 200 changes. Times in Eastern time.</p><div id="auditTable" class="scroll"></div></div>
 <div id="atab-import" hidden><p class="muted">Supplier report columns: ABC #, Product Description, NDC. Numeric formatting is normalized to the supplier's 11-digit format. Imports are additive and never overwrite edited entries.</p>
 <input id="file" type="file" accept=".xlsx"><div class="row"><button id="preview" class="btn" type="button">Preview file</button><button id="import" class="btn primary" type="button" disabled>Import previewed rows</button></div><pre id="previewText">No file selected.</pre></div>
-<p id="adminStatus" class="status" role="status" aria-live="polite"></p></div>
-<p id="adminLockedStatus" class="status" role="status" aria-live="polite"></p>
+</div>
+<p id="adminStatus" class="status" role="status" aria-live="polite"></p>
 </div>
 <div class="card about"><div class="card-head"><span class="emoji" aria-hidden="true">&#8505;&#65039;</span><h2>About</h2></div>
 <p class="muted">Test prototype. No patient information. One individual vial per scan. Technician sign-in is shared and does not identify individuals. Manufacturer expiration warnings are not hard stops. This is internal inventory tracking, not complete DSCSA compliance.</p>
@@ -105,11 +114,11 @@
 </section>
 </main>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
-<nav class="dock" aria-label="Main">
-<a href="#home" data-tab="home"><svg class="ico" aria-hidden="true"><use href="#i-home"/></svg><span>Home</span></a>
-<a href="#inventory" data-tab="inventory"><svg class="ico" aria-hidden="true"><use href="#i-box"/></svg><span>Inventory</span></a>
-<a href="#scan" data-tab="scan" class="scan"><span class="bubble"><svg class="ico" aria-hidden="true"><use href="#i-scan"/></svg></span><span>Scan</span></a>
-<a href="#activity" data-tab="activity"><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg><span>Activity</span></a>
-<a href="#more" data-tab="more"><svg class="ico" aria-hidden="true"><use href="#i-more"/></svg><span>More</span></a>
+<nav class="dock" aria-label="Main"><span id="dockInd" class="dock-ind" aria-hidden="true"></span>
+<a href="#home" data-tab="home"><svg class="ico" aria-hidden="true"><use href="#i-home"/></svg><span class="lbl">Home</span></a>
+<a href="#inventory" data-tab="inventory"><svg class="ico" aria-hidden="true"><use href="#i-box"/></svg><span class="lbl">Inventory</span></a>
+<a href="#scan" data-tab="scan" class="scan"><span class="bubble"><svg class="ico" aria-hidden="true"><use href="#i-scan"/></svg></span><span class="lbl">Scan</span></a>
+<a href="#activity" data-tab="activity"><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg><span class="lbl">Activity</span></a>
+<a href="#more" data-tab="more"><svg class="ico" aria-hidden="true"><use href="#i-more"/></svg><span class="lbl">More</span></a>
 </nav>
 </body></html>

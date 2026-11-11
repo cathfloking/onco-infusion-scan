@@ -1,4 +1,5 @@
 import {need,AppError} from './parser.js';
+import {LOT_INVENTORY} from './queries.js';
 async function digest(s){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))).map(v=>v.toString(16).padStart(2,'0')).join('');}
 // Interim actor label. A shared credential cannot identify a person; replace with the Cloudflare Access identity later.
 export const ACTOR='shared-admin-credential';
@@ -11,15 +12,16 @@ export async function adminActor(request,env){
 const reasonOf=b=>{const r=String(b.reason??'').trim();need(r.length>=8&&r.length<=500,'Enter a reason (8-500 characters).');return r;};
 const versionOf=b=>{need(Number.isInteger(b.version)&&b.version>=1,'Record version missing. Refresh and retry.');return b.version;};
 const stale=()=>new AppError('This record changed since you loaded it. Nothing was saved. Refresh and retry.','STALE_VERSION',409);
-// Inserted only when the preceding UPDATE in the same batch changed exactly one row.
+// Inserted only when the preceding statement in the same batch changed exactly one row.
 const audit=(db,actor,action,type,id,before,after,reason)=>db.prepare('INSERT INTO admin_audit(actor,action,entity_type,entity_id,before_json,after_json,reason) SELECT ?,?,?,?,?,?,? WHERE changes()=1')
  .bind(actor,action,type,String(id),JSON.stringify(before),JSON.stringify(after),reason);
 export async function adminData(db){
  const r=await db.batch([
   db.prepare('SELECT p.abc AS id,p.supplier_abc,p.description,p.ndc11,p.created_at,p.archived_at,p.version,(SELECT COUNT(*) FROM events e WHERE e.product_abc=p.abc)+(SELECT COUNT(*) FROM lot_events l WHERE l.product_abc=p.abc) AS activity_count FROM products p ORDER BY p.description,p.abc'),
   db.prepare('SELECT a.gtin,a.product_abc AS product_id,p.description,a.scanned_ndc11,p.ndc11 AS supplier_ndc11,a.unit_label,a.units_per_scan,a.source,a.created_at,a.enabled,a.disabled_at,a.version FROM package_aliases a JOIN products p ON p.abc=a.product_abc ORDER BY p.description,a.gtin'),
-  db.prepare('SELECT id,at,actor,action,entity_type,entity_id,before_json,after_json,reason FROM admin_audit ORDER BY id DESC LIMIT 200')]);
- return{products:r[0].results,aliases:r[1].results,audit:r[2].results};
+  db.prepare('SELECT id,at,actor,action,entity_type,entity_id,before_json,after_json,reason FROM admin_audit ORDER BY id DESC LIMIT 200'),
+  db.prepare('SELECT * FROM ('+LOT_INVENTORY+') ORDER BY description,expiration,lot')]);
+ return{products:r[0].results,aliases:r[1].results,audit:r[2].results,lots:r[3].results};
 }
 async function product(db,b){
  const old=await db.prepare('SELECT * FROM products WHERE abc=?').bind(String(b.id??'')).first();need(old,'Library record not found.','NOT_FOUND',404);
@@ -50,3 +52,20 @@ export async function setAliasEnabled(db,actor,b){return guarded(async()=>{
  const res=await db.batch([db.prepare('UPDATE package_aliases SET enabled=?,disabled_at=?,version=version+1 WHERE gtin=? AND version=?').bind(b.enabled?1:0,at,gtin,old.version),
   audit(db,actor,b.enabled?'ALIAS_ENABLE':'ALIAS_DISABLE','package_alias',gtin,{enabled:Number(old.enabled),disabled_at:old.disabled_at??null},{enabled:b.enabled?1:0,disabled_at:at},reason)]);
  need(res[0].meta.changes===1,'','STALE_VERSION',409);return{saved:true,gtin,version:old.version+1};});}
+// Explicit, audited quantity adjustment for a NONSERIALIZED lot group. Never rewrites scan history; the database also refuses negative results.
+export async function adjustInventory(db,actor,b){return guarded(async()=>{
+ const reason=reasonOf(b),gtin=String(b.gtin??''),lot=String(b.lot??''),expiration=String(b.expiration??'');
+ need(/^\d{14}$/.test(gtin)&&lot.length>=1&&lot.length<=20&&/^\d{4}-\d{2}-\d{2}$/.test(expiration),'Invalid lot group.');
+ need(['IN_STOCK','OUT'].includes(b.bucket),'Choose In stock or Out.');
+ need(Number.isInteger(b.delta)&&b.delta!==0&&Math.abs(b.delta)<=1000,'Quantity change must be a whole number from 1 to 1000.');
+ need(Number.isInteger(b.expectedIn)&&Number.isInteger(b.expectedOut),'Reload the quantities and retry.');
+ const g=await db.prepare('SELECT * FROM ('+LOT_INVENTORY+') WHERE gtin=? AND lot=? AND expiration=?').bind(gtin,lot,expiration).first();
+ need(g,'Nonserialized lot group not found. Serialized vials cannot be adjusted here.','NOT_FOUND',404);
+ need(Number(g.in_stock)===b.expectedIn&&Number(g.out_quantity)===b.expectedOut,'','STALE_VERSION',409);
+ const current=b.bucket==='IN_STOCK'?Number(g.in_stock):Number(g.out_quantity);
+ need(current+b.delta>=0,'That would make the '+(b.bucket==='IN_STOCK'?'In stock':'Out')+' quantity negative (currently '+current+').');
+ const before={in_stock:Number(g.in_stock),out_quantity:Number(g.out_quantity)},after={...before};
+ if(b.bucket==='IN_STOCK')after.in_stock+=b.delta;else after.out_quantity+=b.delta;
+ await db.batch([db.prepare('INSERT INTO lot_adjustments(gtin,lot,expiration,product_abc,bucket,delta,reason,actor) VALUES(?,?,?,?,?,?,?,?)').bind(gtin,lot,expiration,g.product_abc,b.bucket,b.delta,reason,actor),
+  audit(db,actor,'INVENTORY_ADJUST','lot_group',gtin+'|'+lot+'|'+expiration,before,{...after,bucket:b.bucket,delta:b.delta},reason)]);
+ return{saved:true,...after};});}
