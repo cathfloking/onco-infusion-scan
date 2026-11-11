@@ -1,8 +1,8 @@
 import {need,parseScan,ndcCandidates,productRow,manualNDC,publicProduct} from './parser.js';
 import {contextFor,resolveProduct,requestRecord,aliasDisabled} from './matching.js';
-import {SERIAL_INVENTORY,LOT_INVENTORY,SERIAL_ACTIVITY,LOT_ACTIVITY} from './queries.js';
-import {adminActor,adminData,updateProduct,setArchived,setAliasEnabled} from './admin.js';
-const VERSION='prototype-0.5.0';
+import {SERIAL_INVENTORY,LOT_INVENTORY,SERIAL_ACTIVITY,LOT_ACTIVITY,ADJ_ACTIVITY} from './queries.js';
+import {adminActor,adminData,updateProduct,setArchived,setAliasEnabled,adjustInventory} from './admin.js';
+const VERSION='prototype-0.6.0';
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY'}});
 async function hash(s){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))).map(v=>v.toString(16).padStart(2,'0')).join('');}
 async function authorized(r,e){return await hash(r.headers.get('Authorization')||'')===await hash('Basic '+btoa(e.APP_USER+':'+e.APP_PASSWORD));}
@@ -47,6 +47,7 @@ async function adminRoute(db,actor,path,b){
  if(path==='/api/admin/product/update')return updateProduct(db,actor,b);
  if(path==='/api/admin/product/archive')return setArchived(db,actor,b);
  if(path==='/api/admin/alias/enabled')return setAliasEnabled(db,actor,b);
+ if(path==='/api/admin/inventory/adjust')return adjustInventory(db,actor,b);
  return null;
 }
 export default{
@@ -65,9 +66,9 @@ export default{
   need(env.DB,'Missing DB binding.');
   if(request.method==='GET'&&url.pathname==='/api/admin/data'){await adminActor(request,env);return json(await adminData(env.DB));}
   if(request.method==='GET'&&url.pathname==='/api/data'){
-   const r=await env.DB.batch([env.DB.prepare('SELECT * FROM products ORDER BY description,abc'),env.DB.prepare(SERIAL_INVENTORY),env.DB.prepare(LOT_INVENTORY),env.DB.prepare(SERIAL_ACTIVITY),env.DB.prepare(LOT_ACTIVITY)]);
+   const r=await env.DB.batch([env.DB.prepare('SELECT * FROM products ORDER BY description,abc'),env.DB.prepare(SERIAL_INVENTORY),env.DB.prepare(LOT_INVENTORY),env.DB.prepare(SERIAL_ACTIVITY),env.DB.prepare(LOT_ACTIVITY),env.DB.prepare(ADJ_ACTIVITY)]);
    const inventory=[...r[1].results,...r[2].results].map(decorate).sort((a,b)=>a.description.localeCompare(b.description)||a.expiration.localeCompare(b.expiration));
-   const activity=[...r[3].results,...r[4].results].map(row=>{const info=ndcCandidates(row.gtin);return{...row,ndc10:info.ndc10,scanned_ndc11:row.scanned_ndc11??(info.candidates.includes(row.ndc11)?row.ndc11:null)};}).sort((a,b)=>b.created_at.localeCompare(a.created_at)||b.seq-a.seq);
+   const activity=[...r[3].results,...r[4].results,...r[5].results].map(row=>{const info=ndcCandidates(row.gtin);return{...row,ndc10:info.ndc10,scanned_ndc11:row.scanned_ndc11??(info.candidates.includes(row.ndc11)?row.ndc11:null)};}).sort((a,b)=>b.created_at.localeCompare(a.created_at)||b.seq-a.seq);
    return json({products:r[0].results,inventory,activity,version:VERSION});
   }
   if(request.method!=='POST')return json({error:'Not found'},404);
