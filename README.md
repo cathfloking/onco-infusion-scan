@@ -1,6 +1,6 @@
 # OncoScan — Oncology Infusion Scanner
 
-Scan-based inventory tracking for oncology infusion medications. OncoScan records receiving, pulls and returns by lot, expiration and serial number, and keeps a complete activity record.
+Scan-based inventory tracking for oncology infusion medications. OncoScan records receiving, pulls and returns by lot, expiration and serial number, and keeps a complete activity record. Scan with a USB barcode scanner on a PC, or with the camera on a phone or tablet.
 
 > **Status:** Prototype (`prototype-0.7.0`). Not validated for regulated production use. No DSCSA or other regulatory compliance is claimed.
 
@@ -12,19 +12,22 @@ Scan-based inventory tracking for oncology infusion medications. OncoScan record
 3. [Quick Start (Local)](#quick-start-local)
 4. [Deployment (Cloudflare)](#deployment-cloudflare)
 5. [Using the App](#using-the-app)
-6. [Scan and Inventory Rules](#scan-and-inventory-rules)
-7. [Administration](#administration)
-8. [Database Migrations](#database-migrations)
-9. [Security and Authentication](#security-and-authentication)
-10. [Testing and Validation Status](#testing-and-validation-status)
-11. [Known Limitations and Roadmap](#known-limitations-and-roadmap)
-12. [Contributing Workflow](#contributing-workflow)
+6. [Camera Scanning](#camera-scanning)
+7. [Scan and Inventory Rules](#scan-and-inventory-rules)
+8. [Administration](#administration)
+9. [Database Migrations](#database-migrations)
+10. [Security and Authentication](#security-and-authentication)
+11. [Testing and Validation Status](#testing-and-validation-status)
+12. [Known Limitations and Roadmap](#known-limitations-and-roadmap)
+13. [Contributing Workflow](#contributing-workflow)
 
 ---
 
 ## Features
 
-- **Receive, Pull, Return** workflow driven by a USB barcode scanner (PC) or a mobile/tablet browser.
+- **Receive, Pull, Return** workflow driven by a USB barcode scanner (PC) or the device camera (phone/tablet).
+- **Camera scanning with a confirm step:** read a GS1 Data Matrix with the rear camera, review the parsed details, and save only after tapping Confirm.
+- **Scan feedback:** beep and screen flash on every read; haptic tap on iOS 26.4 and earlier, and on Android.
 - **One vial per scan** (no carton multiplier).
 - **Serialized vials** tracked individually through RECEIVE, PULL and RETURN events.
 - **Nonserialized stock** tracked by GTIN + original lot + original expiration.
@@ -43,6 +46,7 @@ Scan-based inventory tracking for oncology infusion medications. OncoScan record
 | Runtime | Cloudflare Worker (`src/worker.js`) |
 | Database | Cloudflare D1 (SQLite), binding `DB` |
 | Frontend | Static assets in `public/` (`index.html`, `app.js`, `styles.css`, `theme.js`) |
+| Camera scanning | `public/camera-scan.js`, `public/camera-scan.css`; decoder `zxing-wasm` loaded from jsDelivr |
 | Admin backend | `src/admin.js` |
 | Queries | `src/queries.js` |
 | Schema | `migrations/` |
@@ -57,13 +61,19 @@ Two separate D1 databases are used:
 
 ```
 onco-infusion-scan/
-├── migrations/        # D1 schema migrations (0001 … 0007)
-├── public/            # Frontend (index.html, app.js, styles.css, theme.js)
+├── migrations/          # D1 schema migrations (0001 … 0007)
+├── public/              # Frontend
+│   ├── index.html
+│   ├── app.js           # Main app logic (scan form, tables, admin UI)
+│   ├── camera-scan.js   # Camera scanning, confirm sheet, feedback
+│   ├── camera-scan.css  # Camera overlay styles
+│   ├── styles.css
+│   └── theme.js
 ├── src/
-│   ├── worker.js      # Entry point and routing
-│   ├── admin.js       # Admin API (live backend)
-│   └── queries.js     # Database queries
-└── wrangler.jsonc     # Cloudflare configuration
+│   ├── worker.js        # Entry point, routing, security headers (CSP)
+│   ├── admin.js         # Admin API (live backend)
+│   └── queries.js       # Database queries
+└── wrangler.jsonc       # Cloudflare configuration
 ```
 
 ## Quick Start (Local)
@@ -90,6 +100,7 @@ Notes:
 - Local D1 data lives under `.wrangler/`. Delete it to reset.
 - Always pass `--local`. Avoid `--remote` while testing.
 - Never commit `.dev.vars` or real credentials.
+- Camera access needs a secure context. `localhost` counts as secure; testing from a phone requires the HTTPS preview or deployed URL.
 
 ## Deployment (Cloudflare)
 
@@ -104,12 +115,58 @@ Notes:
 
 Navigation is a bottom dock: **Home, Inventory, Scan (center), Activity, More**.
 
-- **Scan:** choose Receive, Pull or Return, then scan. Scan box focus, diagnostics and unfinished state persist across navigation.
+- **Scan:** choose Receive, Pull or Return, then scan with a USB scanner (into the scan box) or tap **Scan with camera**. Scan box focus, diagnostics and unfinished state persist across navigation.
 - **Inventory:** current stock by product/lot/serial, with filters, sorting and Excel export.
 - **Activity:** full event history, searchable.
 - **More:** drug library (collapsed by default; opens from the Home card), quantity tools and admin features.
 
 Layout: above 940 px, tables use normal columns; at 940 px and below they become stacked cards. Reduced-motion preferences are respected.
+
+## Camera Scanning
+
+Camera scanning lets a phone or tablet read the Data Matrix barcode on a vial or package. It adds a convenience path alongside the USB scanner; it does not replace it.
+
+### Requirements
+
+- A current browser with camera access over HTTPS. Developed and tested on an iPhone 17 Pro Max (iOS 26.4.2) in **Safari**.
+- Use Safari in the browser. Camera access is unreliable in iOS Home Screen (PWA) shortcuts, so installing the site as a Home Screen app is not recommended.
+- Good, even lighting. iOS Safari offers no flashlight control to web pages.
+- Allow camera access when prompted. If it was denied: Settings > Apps > Safari > Camera.
+
+### How to use
+
+1. Open the **Scan** tab and choose **Receive**, **Pull** or **Return**.
+2. Tap **📷 Scan with camera** and hold the Data Matrix inside the teal square.
+3. When a code is read, the camera pauses, the device beeps and flashes, and a **confirm sheet** appears.
+4. Check the action, medication, library NDC11, GTIN, lot, expiration, serial and tracking mode. Warnings appear for expired manufacturer dates and archived library entries.
+5. Tap **Confirm** to save exactly one vial, or **Rescan** to discard the read. Nothing is saved until you confirm.
+6. After saving, the sheet shows the result. Tap **Scan next vial** to continue or **Done** to close.
+
+If the product is not in the drug library, the button reads **Resolve product on Scan screen** and hands the scan to the existing add-product and package-alias panel.
+
+### How it works
+
+- The camera is opened with `getUserMedia`. The browser's built-in `BarcodeDetector` is not available in Safari, so frames are decoded in the page with [`zxing-wasm`](https://github.com/Sec-ant/zxing-wasm) (WebAssembly), restricted to **Data Matrix**.
+- The decoder is loaded on first use from jsDelivr, pinned to version `3.1.2`. The `.wasm` file is fetched from `cdn.jsdelivr.net` to match the Content Security Policy.
+- After a read, the page calls the existing `/api/inspect` endpoint to preview the match. Confirm then fills the scan box and submits the normal scan form, so request IDs, GS1 parsing, alias and archive rules, and retry safety are identical to a USB scan.
+- Raw text is shown with the hidden group separator displayed as `<GS>`, so parsing problems are visible.
+- While the camera is open, the scan box does not raise the on-screen keyboard.
+
+### GS1 text normalization
+
+The decoder can return GS1 data in human-readable form, for example `(01)00355566830319(21)…(17)…(10)…`. Those parentheses are added by the library and are not in the barcode, and the server parser rejects them. The camera module therefore:
+
+1. Requests plain text from the decoder (`textMode: 'Plain'`).
+2. Runs a fallback converter, `toRawGs1()`, that removes parentheses and inserts a GS (ASCII 29) after each variable-length field that is not last. Text that is already raw passes through unchanged.
+
+The fixed-length application identifier list in the converter covers 00–04, 11–20, 31xx–36xx and 410–417. Extend it if new layouts are needed.
+
+### Feedback
+
+| Signal | When | Notes |
+|---|---|---|
+| Beep and screen flash | Every read; success and failure tones after saving | Sound can be silenced by the ring/silent switch. |
+| Haptic tap | Read, save success, save failure | Works on Android. On iOS it uses a hidden `<input type="checkbox" switch>` trick that works through iOS 26.4. Reports indicate Apple broke it in iOS 26.5, so expect no haptics on later versions. |
 
 ## Scan and Inventory Rules
 
@@ -118,6 +175,7 @@ Layout: above 940 px, tables use normal columns; at 940 px and below they become
 - **Disabled package alias (exact GTIN):** blocks fallback matching, recreation and new receipts. Recorded stock can still be pulled or returned.
 - **Archived product:** blocks new Receive. Recorded stock can still be pulled or returned.
 - Identical retried requests (same request ID) are never counted twice.
+- Camera scans follow the same rules. Because lot-tracked vials from the same lot produce identical barcodes, the confirm step is the safeguard against accidental double-counting.
 
 ## Administration
 
@@ -148,6 +206,8 @@ Admin access requires separate credentials and an additional `X-Admin-Authorizat
 | 0006 | Append-only `lot_adjustments`; `lot_events_validate_v2` includes adjustments in availability checks |
 | 0007 | `record_corrections` table and triggers; `products_identity_guard` replaces `products_identity_immutable` |
 
+Camera scanning needs no new migration.
+
 **0007 is required before deploying 0.7.0**, because queries reference `record_corrections`.
 
 Verify in the correct D1 console:
@@ -177,7 +237,8 @@ A nonzero count needs review. Do not delete append-only correction or audit hist
 - Audit entries use the shared actor `shared-admin-credential`. This is **not** individual attribution.
 - Basic auth has no reliable technician logout.
 - No admin rate limiting yet.
-- The Content Security Policy is why CSS is external and SheetJS is pinned to `https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js`.
+- Content Security Policy (set in `src/worker.js`): scripts from `'self'`, `'wasm-unsafe-eval'`, `https://cdn.sheetjs.com` and `https://cdn.jsdelivr.net`; connections to `'self'` and `https://cdn.jsdelivr.net`; `media-src 'self' blob:`; external CSS only (no inline styles). SheetJS is pinned to `https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js`.
+- **Third-party code:** the camera decoder is loaded from jsDelivr without an integrity check, and the CSP allows that whole host. This is acceptable for a prototype. Before clinical use, host `zxing-wasm` under `public/vendor/` and remove jsDelivr from the CSP.
 - Never put real credentials in code, files, screenshots or issues.
 
 ## Testing and Validation Status
@@ -188,7 +249,10 @@ Validation to date is limited and mostly simulated:
 - 0.6.0: 37 backend checks against a SQLite D1 stand-in; 34 simulated Chromium frontend checks (SheetJS stubbed).
 - PR #3 safety patch: function syntax checks and seven SQLite transaction-pattern checks. Not a full Worker/D1 or end-to-end browser regression.
 - The `layout_improvements` branch was tested manually on a Cloudflare preview, and PR #3 was then merged to `main`.
-- **Not yet independently verified:** post-merge production deploy, production migration 0007 state, live USB scanner behavior, and Excel export with the real SheetJS library.
+- **Camera scanning (PR #4):** reviewed in code and tested manually on an iPhone 17 Pro Max (iOS 26.4.2, Safari) on the Cloudflare preview. Early testing exposed two problems that were fixed: the decoder's `.wasm` file was blocked by the CSP, and the decoder returned GS1 text with added parentheses (see [GS1 text normalization](#gs1-text-normalization)). The parentheses fix has not been independently re-verified with a full Receive/Pull/Return cycle on real vials.
+- **Not yet independently verified:** post-merge production deploy, production migration 0007 state, live USB scanner behavior, Excel export with the real SheetJS library, camera read rates across manufacturers, and camera behavior on iOS 26.5 or later.
+
+A suggested camera pilot: scan 20–30 real vials from several manufacturers in clinic lighting, record read rate and time to read, and compare with the USB scanner on the same vials.
 
 ## Known Limitations and Roadmap
 
@@ -205,12 +269,18 @@ Validation to date is limited and mostly simulated:
 11. Individual attribution (for example Cloudflare Access) is future work.
 12. Legacy `public/admin.html`, `admin.css` and `admin.js` may remain; verify before removing. Keep `src/admin.js`.
 13. No full DSCSA compliance claim.
+14. Camera: self-host the decoder instead of using jsDelivr, and tighten the CSP.
+15. Camera: reads Data Matrix only; linear barcodes (such as GS1-128) and QR codes are not read.
+16. Camera: small, curved or glossy labels may read slowly; no torch/zoom on iOS Safari.
+17. Camera: iOS haptics are expected to stop working on iOS 26.5 and later; beep and flash remain.
+18. Camera: the GS1 normalizer uses a fixed-length AI table and should be extended or replaced with a full GS1 parser if more layouts appear.
+19. Camera: bump the worker version string and re-run the pilot after any decoder or CSP change.
 
 ## Contributing Workflow
 
 1. Branch from current `main`.
-2. Preserve scan retry behavior, scan box focus handling and server-side admin gates.
-3. Test in a branch preview with the isolated preview D1 database.
+2. Preserve scan retry behavior, scan box focus handling, the camera confirm step and server-side admin gates.
+3. Test in a branch preview with the isolated preview D1 database. Test camera changes on a real phone in Safari over HTTPS.
 4. Review table layouts at 940 px and below when adding columns (watch the admin Action column and sort indicators).
 5. Merge via pull request only after preview testing.
 
