@@ -62,7 +62,7 @@ export default{
   if(!(url.pathname==='/api'||url.pathname.startsWith('/api/'))){
    if(!['GET','HEAD'].includes(request.method))return json({error:'Not found'},404);need(env.ASSETS,'Missing ASSETS binding.');
    const a=await env.ASSETS.fetch(request),r=new Response(a.body,a);for(const[k,v]of Object.entries(security))r.headers.set(k,v);
-   r.headers.set('Content-Security-Policy',"default-src 'self'; script-src 'self' https://cdn.sheetjs.com; style-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");return r;
+   r.headers.set('Content-Security-Policy',"default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://cdn.sheetjs.com https://cdn.jsdelivr.net; style-src 'self'; connect-src 'self' https://cdn.jsdelivr.net; media-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");return r;
   }
   need(env.DB,'Missing DB binding.');
   if(request.method==='GET'&&url.pathname==='/api/admin/data'){await adminActor(request,env);return json(await adminData(env.DB));}
