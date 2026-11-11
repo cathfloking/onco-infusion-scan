@@ -192,7 +192,7 @@ async function onConfirm() {
   $('scanForm').requestSubmit();
   const start = Date.now();
   await new Promise(res => { const t = setInterval(() => { if (!$('save').disabled || Date.now() - start > 35000) { clearInterval(t); res(); } }, 150); });
-  const st = $('status'), ok = st.classList.contains('ok');
+  const st = $('status'), saved = /\bsaved\b/i.test(st.textContent) && !/not confirmed/i.test(st.textContent), ok = st.classList.contains('ok');
   sheetBody.replaceChildren(); sheetWarn.textContent = '';
   sheetTitle.textContent = ok ? 'Saved' : 'Not saved';
   addRow('Result', st.textContent || '(no message)');
