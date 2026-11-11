@@ -1,16 +1,19 @@
 import {ndcCandidates,publicProduct} from './parser.js';
+export async function aliasDisabled(db,gtin){const a=await db.prepare('SELECT enabled FROM package_aliases WHERE gtin=?').bind(gtin).first();return !!a&&Number(a.enabled)!==1;}
 export async function resolveProduct(db,p){
  const info=ndcCandidates(p.gtin);
- const alias=await db.prepare('SELECT p.*,a.scanned_ndc11,a.source FROM package_aliases a JOIN products p ON p.abc=a.product_abc WHERE a.gtin=?').bind(p.gtin).first();
+ const alias=await db.prepare('SELECT p.*,a.scanned_ndc11,a.source,a.enabled AS alias_enabled FROM package_aliases a JOIN products p ON p.abc=a.product_abc WHERE a.gtin=?').bind(p.gtin).first();
+ // A disabled alias is a deliberate deny: never fall through to GTIN-mapping or NDC matching.
+ if(alias&&Number(alias.alias_enabled)!==1)return{product:null,reason:'ALIAS_DISABLED',matches:[],suggestions:[],...info};
  if(alias)return{product:alias,scanned_ndc11:alias.scanned_ndc11,method:'verified package alias',...info};
  const mapped=await db.prepare('SELECT p.* FROM gtin_mappings m JOIN products p ON p.abc=m.product_abc WHERE m.gtin=?').bind(p.gtin).first();
  if(mapped)return{product:mapped,scanned_ndc11:info.candidates.includes(mapped.ndc11)?mapped.ndc11:null,method:'exact GTIN mapping',...info};
  const rows=info.candidates.length?(await db.prepare('SELECT * FROM products WHERE ndc11 IN ('+info.candidates.map(()=>'?').join(',')+') ORDER BY abc').bind(...info.candidates).all()).results:[];
  const ndcs=[...new Set(rows.map(r=>r.ndc11))];
- if(ndcs.length===1){rows.sort((a,b)=>Number(a.abc.startsWith('MANUAL-'))-Number(b.abc.startsWith('MANUAL-'))||a.abc.localeCompare(b.abc));return{product:rows[0],scanned_ndc11:ndcs[0],method:'unique exact NDC match',supplierEntries:rows.length,...info};}
+ if(ndcs.length===1){rows.sort((a,b)=>Number(!!a.archived_at)-Number(!!b.archived_at)||Number(a.abc.startsWith('MANUAL-'))-Number(b.abc.startsWith('MANUAL-'))||a.abc.localeCompare(b.abc));return{product:rows[0],scanned_ndc11:ndcs[0],method:'unique exact NDC match',supplierEntries:rows.length,...info};}
  // Same-product/package variants are suggestions only, never automatic identity changes.
  let suggestions=[];
- if(!ndcs.length&&info.candidates.length){const all=(await db.prepare('SELECT * FROM products ORDER BY description,abc').all()).results;suggestions=all.filter(r=>info.candidates.some(n=>n.slice(0,9)===r.ndc11.slice(0,9))).map(publicProduct);}
+ if(!ndcs.length&&info.candidates.length){const all=(await db.prepare('SELECT * FROM products ORDER BY description,abc').all()).results;suggestions=all.filter(r=>!r.archived_at&&info.candidates.some(n=>n.slice(0,9)===r.ndc11.slice(0,9))).map(publicProduct);}
  return{product:null,reason:ndcs.length?'AMBIGUOUS_MATCH':'UNKNOWN_PRODUCT',matches:rows.map(publicProduct),suggestions,...info};
 }
 export async function contextFor(db,p){
