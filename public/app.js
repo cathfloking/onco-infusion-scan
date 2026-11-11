@@ -1,5 +1,5 @@
 const $=id=>document.getElementById(id);
-const VIEWS=['home','scan','inventory','activity','library','more'];
+const VIEWS=['home','scan','inventory','activity','more'];
 let data={products:[],inventory:[],activity:[],version:''},previewRows=[],busy=false,pending=null,unknownContext=null,lastRefresh=0,view='home';
 let adminCred=null,admin={products:[],aliases:[],audit:[]},editing=null,aliasEditing=null,adminBusy=false;
 async function api(path,body,headers){
@@ -49,9 +49,11 @@ function renderHome(){
  $('hExpired').hidden=expired===0;$('hExpired').textContent=expired+' In-stock vial'+(expired===1?'':'s')+' past manufacturer expiration';
  const last=data.activity[0];
  $('hLast').textContent=last?new Date(last.created_at).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'No activity yet';
- $('hToday').textContent=data.activity.filter(a=>new Date(a.created_at).toLocaleDateString('en-CA')===today).length+' scans today';
+ const todayCount=data.activity.filter(a=>new Date(a.created_at).toLocaleDateString('en-CA')===today).length;
+ $('hToday').textContent=todayCount+(todayCount===1?' scan':' scans')+' today';
  const active=data.products.filter(p=>!p.archived_at).length;
  $('hLib').textContent=active;$('hArchived').textContent=data.products.length-active>0?(data.products.length-active)+' archived':'Medication catalog';
+ $('libSummary').textContent=active+' entries'+(data.products.length-active>0?' ('+(data.products.length-active)+' archived)':'');
  $('hAdmin').textContent=adminCred?'Administrator unlocked':'Admin tools locked';
  $('versionText').textContent=data.version?'Version '+data.version:'';
 }
@@ -62,23 +64,28 @@ function renderInventory(){
  $('count').textContent=data.inventory.reduce((n,r)=>n+Number(r.in_stock),0)+' total vials In stock; '+data.inventory.reduce((n,r)=>n+Number(r.out_quantity),0)+' Out; '+rows.length+' inventory rows shown.';
 }
 function renderActivity(){table('activity',activityRows().slice(0,100),cols(['Scanned At (UTC)','Action','Product Description','Tracking Mode','Lot Number','Serial Number']));}
+// Drug library accordion (More tab). The long list is only built while expanded.
 function renderLibrary(){
+ if($('libBody').hidden)return;
  const q=$('libSearch').value.toLowerCase(),all=$('libArchived').checked;
  const rows=libraryRows().filter(r=>(all||r.Status==='Active')&&JSON.stringify(r).toLowerCase().includes(q));
  table('library',rows,[{label:'Supplier ABC',value:r=>r['ABC #']},{label:'Description',value:r=>r['Product Description']},{label:'NDC11',value:r=>r.NDC,mono:true},{label:'Status',value:r=>r.Status}],r=>r.Status==='Archived'?'archived':'');
  $('libCount').textContent=rows.length+' entries shown.';
 }
+function setLibrary(open){$('libBody').hidden=!open;$('libToggle').setAttribute('aria-expanded',String(open));if(open)renderLibrary();else $('library').replaceChildren();}
+$('libToggle').addEventListener('click',()=>setLibrary($('libBody').hidden));
 function renderAll(){renderHome();renderInventory();renderActivity();renderLibrary();}
 function setPill(ok){$('dot').className='dot '+(ok?'ok':'bad');$('updated').textContent=ok?'Updated: '+new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit',timeZoneName:'short'}):'Update failed - tap to retry';}
 async function refresh(){try{data=await api('/api/data');lastRefresh=Date.now();setPill(true);}catch(e){setPill(false);throw e;}renderAll();}
 function show(name){
+ const openLibrary=name==='library';if(openLibrary)name='more';
  if(!VIEWS.includes(name))name='home';view=name;
  for(const v of VIEWS)$('view-'+v).hidden=v!==name;
- const tab=name==='library'?'more':name;
- for(const a of document.querySelectorAll('.dock a'))a.setAttribute('aria-current',a.dataset.tab===tab?'page':'false');
+ for(const a of document.querySelectorAll('.dock a'))a.setAttribute('aria-current',a.dataset.tab===name?'page':'false');
  window.scrollTo(0,0);
+ if(openLibrary){setLibrary(true);setTimeout(()=>$('libAcc').scrollIntoView({block:'start'}),0);}
  if(name==='scan')setTimeout(()=>$('raw').focus(),0);
- else if(['home','inventory','activity','library'].includes(name)&&Date.now()-lastRefresh>30000)refresh().catch(e=>toast(e.message,true));
+ else if(['home','inventory','activity','more'].includes(name)&&Date.now()-lastRefresh>30000)refresh().catch(e=>toast(e.message,true));
 }
 window.addEventListener('hashchange',()=>show(location.hash.slice(1)));
 // Settings and theme
