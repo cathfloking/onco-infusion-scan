@@ -2,7 +2,7 @@ import {need,parseScan,ndcCandidates,productRow,manualNDC,publicProduct} from '.
 import {contextFor,resolveProduct,requestRecord,aliasDisabled} from './matching.js';
 import {SERIAL_INVENTORY,LOT_INVENTORY,SERIAL_ACTIVITY,LOT_ACTIVITY} from './queries.js';
 import {adminActor,adminData,updateProduct,setArchived,setAliasEnabled} from './admin.js';
-const VERSION='prototype-0.4.0';
+const VERSION='prototype-0.5.0';
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY'}});
 async function hash(s){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))).map(v=>v.toString(16).padStart(2,'0')).join('');}
 async function authorized(r,e){return await hash(r.headers.get('Authorization')||'')===await hash('Basic '+btoa(e.APP_USER+':'+e.APP_PASSWORD));}
@@ -73,10 +73,11 @@ export default{
   if(request.method!=='POST')return json({error:'Not found'},404);
   need(request.headers.get('Origin')===url.origin,'Cross-origin or missing-origin write rejected.');
   need((request.headers.get('Content-Type')||'').startsWith('application/json'),'JSON required.');
-  const adminPath=url.pathname.startsWith('/api/admin/'),actor=adminPath?await adminActor(request,env):null;
+  // Library import is administrator-only, like every /api/admin/ route. Checked on the server, not just hidden in the interface.
+  const importPath=url.pathname==='/api/import',adminPath=importPath||url.pathname.startsWith('/api/admin/'),actor=adminPath?await adminActor(request,env):null;
   const text=await request.text();need(text.length<=1000000,'Request too large.');const b=JSON.parse(text);
-  if(adminPath){const result=await adminRoute(env.DB,actor,url.pathname,b);return result?json(result):json({error:'Not found'},404);}
-  if(url.pathname==='/api/import'){
+  if(adminPath&&!importPath){const result=await adminRoute(env.DB,actor,url.pathname,b);return result?json(result):json({error:'Not found'},404);}
+  if(importPath){
    need(Array.isArray(b.rows)&&b.rows.length>0&&b.rows.length<=2000,'Import 1-2000 rows.');const unique=new Map();
    for(const source of b.rows){const row=productRow(source),old=unique.get(row.abc);need(!old||(old.ndc11===row.ndc11&&old.description===row.description),'Conflicting duplicate ABC '+row.abc);unique.set(row.abc,row);}
    const rows=[...unique.values()],old=new Map((await env.DB.prepare('SELECT * FROM products').all()).results.map(r=>[r.abc,r]));
@@ -85,7 +86,9 @@ export default{
    let inserted=0;for(let i=0;i<rows.length;i+=50){const results=await env.DB.batch(rows.slice(i,i+50).map(r=>env.DB.prepare('INSERT INTO products(abc,description,ndc_original,ndc11,supplier_abc) VALUES(?,?,?,?,?) ON CONFLICT(abc) DO NOTHING').bind(r.abc,r.description,r.ndc_original,r.ndc11,r.abc)));inserted+=results.reduce((n,r)=>n+(r.meta.changes||0),0);}
    // Seed the one manufacturer-verified alias if the library was imported after migration.
    await env.DB.prepare("INSERT INTO package_aliases(gtin,product_abc,scanned_ndc11,unit_label,units_per_scan,source) SELECT '00363323884017',abc,'63323088401','vial',1,'Fresenius Kabi DailyMed labeling: 63323-884-01 each; 63323-884-06 tray' FROM products WHERE ndc11='63323088406' ORDER BY abc LIMIT 1 ON CONFLICT(gtin) DO NOTHING").run();
-   return json({inserted,skipped:rows.length-inserted,duplicates:b.rows.length-rows.length});
+   const summary={inserted,skipped:rows.length-inserted,duplicates:b.rows.length-rows.length};
+   await env.DB.prepare("INSERT INTO admin_audit(actor,action,entity_type,entity_id,before_json,after_json,reason) VALUES(?,'LIBRARY_IMPORT','library','import','{}',?,'Supplier library import')").bind(actor,JSON.stringify(summary)).run();
+   return json(summary);
   }
   const p=parseScan(b.raw,env.SCAN_SEPARATOR||'');
   if(url.pathname==='/api/products/add')return json(await addProduct(env.DB,b,p));
