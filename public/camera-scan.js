@@ -15,6 +15,17 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 
 const link = el('link'); link.rel = 'stylesheet'; link.href = '/camera-scan.css'; document.head.append(link);
 
+// GS1 text normalizer. ZXing can return the human-readable form "(01)...(21)..." (the parentheses are added by the
+// library and are not in the barcode). The server parser expects the raw element string: no parentheses, and a GS
+// (ASCII 29) after every variable-length field that is not last. Raw text passes through unchanged.
+function toRawGs1(text) {
+  if (!/^\(\d{2,4}\)/.test(text)) return text;
+  const parts = [...text.matchAll(/\((\d{2,4})\)([^(]*)/g)];
+  if (!parts.length || parts.map(p => p[0]).join('') !== text) return text;
+  const fixed = ai => /^(0[0-4]|1[1-9]|20)$/.test(ai) || /^3[1-6]\d\d$/.test(ai) || /^41[0-7]$/.test(ai);
+  return parts.map((p, i) => p[1] + p[2] + (!fixed(p[1]) && i < parts.length - 1 ? '\x1d' : '')).join('');
+}
+
 // ---------- Feedback: haptic (iOS switch trick up to iOS 26.4; Android vibrate), beep, visual flash ----------
 const haptic = (() => {
   let label = null;
@@ -142,9 +153,10 @@ async function loop() {
       const side = Math.min(Math.round(box / scale), vw, vh), sx = Math.round((vw - side) / 2), sy = Math.round((vh - side) / 2);
       canvas.width = canvas.height = side;
       ctx.drawImage(video, sx, sy, side, side, 0, 0, side, side);
-      const found = await engine.readBarcodes(ctx.getImageData(0, 0, side, side), { formats: ['DataMatrix'], tryHarder: true, tryRotate: true, tryInvert: true, maxNumberOfSymbols: 1 });
+      const found = await engine.readBarcodes(ctx.getImageData(0, 0, side, side), { formats: ['DataMatrix'], textMode: 'Plain', tryHarder: true, tryRotate: true, tryInvert: true, maxNumberOfSymbols: 1 });
       const hit = found.find(r => r.text && r.isValid !== false);
-      if (hit && !(hit.text === ignore.text && Date.now() < ignore.until)) { await onDetect(hit.text); return; }
+      const text = hit ? toRawGs1(hit.text) : '';
+      if (hit && !(text === ignore.text && Date.now() < ignore.until)) { await onDetect(text); return; }
     }
   } catch (e) { hint.textContent = 'Scan error: ' + (e && e.message || e); }
   if (running && !paused) timer = setTimeout(loop, 60);
@@ -192,7 +204,7 @@ async function onConfirm() {
   $('scanForm').requestSubmit();
   const start = Date.now();
   await new Promise(res => { const t = setInterval(() => { if (!$('save').disabled || Date.now() - start > 35000) { clearInterval(t); res(); } }, 150); });
-  const st = $('status'), saved = /\bsaved\b/i.test(st.textContent) && !/not confirmed/i.test(st.textContent), ok = st.classList.contains('ok');
+  const st = $('status'), saved = /\bsaved\b/i.test(st.textContent) && !/not confirmed/i.test(st.textContent);
   sheetBody.replaceChildren(); sheetWarn.textContent = '';
   sheetTitle.textContent = saved ? 'Saved' : 'Not saved';
   addRow('Result', st.textContent || '(no message)');
