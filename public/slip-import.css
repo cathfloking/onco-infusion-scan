@@ -1,7 +1,9 @@
+[hidden]{display:none!important}
 .si-card{margin:0 0 14px;padding:14px;border:1px solid #9fb5c0;border-radius:14px;background:rgba(15,143,134,.07)}
 .si-card h3{margin:0 0 4px;font-size:1.05rem}
 .si-btns{display:flex;gap:10px;flex-wrap:wrap}
 .si-btn{min-height:46px;padding:0 16px;border-radius:12px;border:1px solid #9fb5c0;background:#eef4f6;color:#0b2a3a;font-size:1rem;font-weight:600}
+.si-btn.si-small{min-height:40px;padding:0 14px;font-size:.95rem}
 .si-btn.si-primary{background:#0f8f86;border-color:#0f8f86;color:#fff}
 .si-btn.si-danger{color:#9b1c1c;border-color:#d9a3a3}
 .si-btn:disabled{opacity:.5}
@@ -12,14 +14,24 @@ body.si-open{overflow:hidden}
 .si-head h2{margin:0;font-size:1.2rem}
 .si-x{min-height:40px;padding:0 14px;border-radius:20px;border:1px solid #9fb5c0;background:#eef4f6;font-weight:600;color:#0b2a3a}
 .si-body{flex:1;overflow:auto;padding:12px 14px calc(env(safe-area-inset-bottom) + 90px)}
-.si-meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-bottom:8px}
-.si-field,.si-mini{display:flex;flex-direction:column;gap:4px;font-size:.85rem;color:#5b7380}
-.si-body input[type=text],.si-body input[type=number],.si-body input[type=date],.si-body input[type=datetime-local],.si-body select{min-height:42px;padding:0 10px;border:1px solid #9fb5c0;border-radius:10px;font-size:1rem;background:#fff;color:#0b2a3a;width:100%;box-sizing:border-box}
+
+/* Form controls: one height and one box model for every input type so iOS date pickers line up with text boxes */
+.si-body input[type=text],.si-body input[type=number],.si-body input[type=date],.si-body input[type=datetime-local],.si-body select{
+ -webkit-appearance:none;appearance:none;display:block;box-sizing:border-box;width:100%;min-width:0;height:42px;min-height:42px;margin:0;padding:0 10px;
+ border:1px solid #9fb5c0;border-radius:10px;font-size:1rem;line-height:normal;text-align:left;background:#fff;color:#0b2a3a}
+.si-body input[type=date]::-webkit-date-and-time-value,.si-body input[type=datetime-local]::-webkit-date-and-time-value{text-align:left;margin:0;min-height:1.2em}
+.si-body input[type=date]::-webkit-datetime-edit,.si-body input[type=datetime-local]::-webkit-datetime-edit{padding:0}
+.si-body select{padding-right:28px}
+
+.si-meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:10px;margin-bottom:8px;align-items:end}
+.si-field,.si-mini{display:flex;flex-direction:column;justify-content:flex-end;gap:4px;min-width:0;font-size:.85rem;line-height:1.2;color:#5b7380}
 .si-sum{margin:8px 0;font-weight:600}
 .si-warn p{margin:2px 0;color:#b45309;font-weight:600}
 p.si-warn{color:#b45309;font-weight:600}
 .si-list{display:flex;flex-direction:column;gap:8px}
 .si-row{display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid #d5e0e5;border-radius:12px;background:#fff}
+.si-row.si-block{flex-direction:column;gap:8px}
+.si-top{display:flex;gap:10px;align-items:flex-start;width:100%}
 .si-row>input[type=checkbox]{margin-top:4px;width:22px;height:22px;flex:none}
 .si-main{flex:1;min-width:0}
 .si-title{font-weight:700;word-break:break-word}
@@ -33,17 +45,27 @@ p.si-warn{color:#b45309;font-weight:600}
 .si-chip.si-partial{background:#fdecc8;color:#8a4b00}
 .si-chip.si-over{background:#fbd5d5;color:#9b1c1c}
 .si-chip.si-pending{background:#e5edf0;color:#35505e}
-.si-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-top:8px}
+.si-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:8px;align-items:end}
 .si-row.si-complete{border-color:#8fd3b5;background:#f1fbf6}
 .si-row.si-partial{border-color:#f0cd86}
 .si-row.si-over{border-color:#e6a1a1;background:#fff5f5}
 .si-count{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none}
 .si-count b{font-size:1.1rem}
 .si-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
-.si-bar select{flex:1;min-width:140px}
+.si-bar select{flex:1;min-width:140px;width:auto}
 .si-prog{height:12px;border-radius:6px;background:#e5edf0;overflow:hidden}
 .si-fill{height:100%;width:0;background:#0f8f86;transition:width .4s ease}
 .si-unx h3{margin:16px 0 6px}
-.si-foot{position:fixed;left:0;right:0;bottom:0;display:flex;gap:10px;justify-content:flex-end;align-items:center;padding:10px 14px calc(env(safe-area-inset-bottom) + 10px);background:#fff;border-top:1px solid #d5e0e5}
+
+.si-scan{margin:0 0 12px;padding:10px;border:1px solid #9fb5c0;border-radius:12px;background:#f4f9fa}
+.si-scanrow{display:flex;gap:8px}
+.si-scanrow input{flex:1}
+.si-scanmsg{margin:6px 0 0;min-height:1.2em;font-size:.9rem;color:#0b6b45;font-weight:600;word-break:break-word}
+.si-scanmsg.si-bad{color:#9b1c1c}
+.si-act{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
+.si-act .si-mini{width:110px}
+.si-why{flex:1;min-width:160px;font-size:.85rem;color:#5b7380}
+.si-edit{border-top:1px dashed #c3d3da;padding-top:8px}
+.si-foot{position:fixed;left:0;right:0;bottom:0;display:flex;gap:10px;justify-content:flex-end;align-items:center;flex-wrap:wrap;padding:10px 14px calc(env(safe-area-inset-bottom) + 10px);background:#fff;border-top:1px solid #d5e0e5}
 .si-foot .si-status{margin:0 auto 0 0;color:#9b1c1c;font-weight:600;font-size:.9rem}
 @media (prefers-reduced-motion:reduce){.si-fill{transition:none}}
