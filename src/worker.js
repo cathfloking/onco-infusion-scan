@@ -1,4 +1,4 @@
-\import {need,parseScan,ndcCandidates,productRow,manualNDC,publicProduct} from './parser.js';
+import {need,parseScan,ndcCandidates,productRow,manualNDC,publicProduct} from './parser.js';
 import {contextFor,resolveProduct,requestRecord,aliasDisabled} from './matching.js';
 import {SERIAL_INVENTORY,LOT_INVENTORY,SERIAL_ACTIVITY,LOT_ACTIVITY,ADJ_ACTIVITY} from './queries.js';
 import {adminActor,adminData,updateProduct,setArchived,setAliasEnabled,adjustInventory,editInventory} from './admin.js';
