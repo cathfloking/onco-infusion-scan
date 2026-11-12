@@ -209,6 +209,7 @@ async function onConfirm() {
   sheetTitle.textContent = saved ? 'Saved' : 'Not saved';
   addRow('Result', st.textContent || '(no message)');
   if (saved) { haptic('success'); beep(1175, 90); } else { haptic('error'); beep(220, 220); }
+  document.dispatchEvent(new CustomEvent('oncoscan:saved', { detail: { saved } }));
   btnRescan.disabled = false; btnRescan.textContent = 'Scan next vial';
   btnConfirm.textContent = 'Done'; btnConfirm.disabled = false;
   btnConfirm.onclick = () => { btnConfirm.onclick = () => onConfirm(); btnRescan.onclick = resume; btnRescan.textContent = 'Rescan'; close(); };
@@ -222,6 +223,7 @@ function install() {
   b.addEventListener('click', open); form.before(b);
 }
 install();
+window.OncoCamera = { open };   
 document.addEventListener('visibilitychange', () => { if (document.hidden && overlay && !overlay.hidden) close(); });
 window.addEventListener('hashchange', () => { if (overlay && !overlay.hidden) close(); });
 window.addEventListener('pagehide', stopCamera);
