@@ -1,8 +1,8 @@
-import {need,parseScan,ndcCandidates,productRow,manualNDC,publicProduct} from './parser.js';
+\import {need,parseScan,ndcCandidates,productRow,manualNDC,publicProduct} from './parser.js';
 import {contextFor,resolveProduct,requestRecord,aliasDisabled} from './matching.js';
 import {SERIAL_INVENTORY,LOT_INVENTORY,SERIAL_ACTIVITY,LOT_ACTIVITY,ADJ_ACTIVITY} from './queries.js';
 import {adminActor,adminData,updateProduct,setArchived,setAliasEnabled,adjustInventory,editInventory} from './admin.js';
-import {listShipments,saveShipment,setShipmentStatus} from './shipments.js';
+import {listShipments,saveShipment,setShipmentStatus,updateLine,receiveShipment,shipmentEligibility} from './shipments.js';
 const VERSION='prototype-0.7.0';
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY'}});
 async function hash(s){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))).map(v=>v.toString(16).padStart(2,'0')).join('');}
@@ -74,6 +74,7 @@ export default{
    return json({products:r[0].results,inventory,activity,version:VERSION});
   }
   if(request.method==='GET'&&url.pathname==='/api/shipments')return json(await listShipments(env.DB));
+  if(request.method==='GET'&&url.pathname==='/api/shipments/eligibility')return json(await shipmentEligibility(env.DB,url.searchParams.get('id')));
   if(request.method!=='POST')return json({error:'Not found'},404);
   need(request.headers.get('Origin')===url.origin,'Cross-origin or missing-origin write rejected.');
   need((request.headers.get('Content-Type')||'').startsWith('application/json'),'JSON required.');
@@ -82,6 +83,8 @@ export default{
   const text=await request.text();need(text.length<=1000000,'Request too large.');const b=JSON.parse(text);
   if(url.pathname==='/api/shipments/save')return json(await saveShipment(env.DB,b));
   if(url.pathname==='/api/shipments/status')return json(await setShipmentStatus(env.DB,b));
+  if(url.pathname==='/api/shipments/receive')return json(await receiveShipment(env.DB,b));
+  if(url.pathname==='/api/shipments/line')return json(await updateLine(env.DB,b));
   if(adminPath&&!importPath){const result=await adminRoute(env.DB,actor,url.pathname,b);return result?json(result):json({error:'Not found'},404);}
   if(importPath){
    need(Array.isArray(b.rows)&&b.rows.length>0&&b.rows.length<=2000,'Import 1-2000 rows.');const unique=new Map();
