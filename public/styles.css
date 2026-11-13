@@ -11,8 +11,9 @@ h1,h2,h3{margin:0}p{margin:.4rem 0}a{color:var(--teal)}
 .brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--teal);margin-right:auto}
 .logo{width:68px;height:41px}.brand-text{font-size:2.15rem;font-weight:800;letter-spacing:.01em;line-height:1}
 .brand-text b{color:var(--navy)}.brand-text span{color:var(--teal)}
-.iconbtn{display:grid;place-items:center;width:48px;height:48px;border-radius:16px;border:1px solid var(--line);background:var(--card);color:var(--text);box-shadow:var(--shadow);cursor:pointer;transition:transform .2s var(--ease)}
-.iconbtn:hover{transform:rotate(25deg)}
+.iconbtn{display:grid;place-items:center;width:48px;height:48px;border-radius:16px;border:1px solid var(--line);background:var(--card);color:var(--text);box-shadow:var(--shadow);cursor:pointer}
+.iconbtn .ico{transition:transform .2s var(--ease)}
+@media (hover:hover){.iconbtn:hover .ico{transform:rotate(25deg)}}
 .popover{position:absolute;right:16px;top:76px;z-index:30;width:min(320px,calc(100% - 32px));background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;box-shadow:var(--shadow)}
 .popover:not([hidden]){animation:pop .22s var(--ease) both;transform-origin:top right}
 .popover h2{font-size:1.05rem}
