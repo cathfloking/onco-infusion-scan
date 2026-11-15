@@ -1,9 +1,9 @@
 import {need} from './parser.js';
-import {aliasDisabled} from './matching.js';
 // Expected shipments (packing slips).
-// Saving a shipment creates planning data only. The ONLY inventory write here is receiveShipment(), which records
-// clearly labeled manual receipts for lot-tracked products whose barcode identity OncoScan already knows from earlier scans.
-export const MAX_LINES=99; // one D1 batch = 1 shipment insert + up to 99 line inserts
+// Saving a shipment creates planning data only. The inventory writes here are receiveShipment() (clearly labeled manual
+// lot-level receipts for lines whose slip shows a lot AND expiration) and, if the drug is not in the library yet, one
+// library entry created from the slip description.
+export const MAX_LINES=99; // one D1 batch = library inserts + up to 99 receipt inserts
 const txt=(v,max,label)=>{const s=String(v??'').trim();need(s.length<=max,label+' is too long.');return s;};
 async function sha(s){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))).map(v=>v.toString(16).padStart(2,'0')).join('');}
 function cleanLine(l,n){
@@ -66,38 +66,61 @@ export async function updateLine(db,b){
  return{ok:true,id};
 }
 
-// ---- Manual receipt (no scan) ----
-// Allowed only when everything needed for a correct ledger row is already known: the slip has lot + expiration, and earlier
-// scans show exactly one barcode identity (GTIN) for this NDC, tracked by lot (never by serial number).
+// ---- Manual (lot-level) receipt ----
+// A line can be received without scanning when the slip shows its lot AND expiration. Serial numbers are not required, and a
+// drug does not need to have been scanned before. Ledger rows need a GTIN, so one is taken from earlier scans of the same NDC or,
+// failing that, built from the NDC with the standard GS1 pattern (003 + NDC10 + check digit). If the real vial carries a different
+// GTIN it does not matter: Pull/Return of a vial with no record of its own falls back to this lot group (see manualLotGroup).
+export function ndc10Forms(ndc11){
+ const f=[];
+ if(ndc11[0]==='0')f.push(ndc11.slice(1));                          // 4-4-2
+ if(ndc11[5]==='0')f.push(ndc11.slice(0,5)+ndc11.slice(6));         // 5-3-2
+ if(ndc11[9]==='0')f.push(ndc11.slice(0,9)+ndc11[10]);              // 5-4-1
+ return f;
+}
+export function gtinFromNdc10(n){
+ const b='003'+n;let sum=0;for(let i=0;i<13;i++)sum+=Number(b[i])*(i%2===0?3:1);
+ return b+((10-sum%10)%10);
+}
 export function eligibility(lines,L){
  const byAbc=new Map(L.products.map(p=>[p.abc,p])),out=new Map();
+ const rank=p=>[p.archived_at?1:0,String(p.abc).startsWith('MANUAL-')?1:0,p.abc];
  for(const l of lines){
   const no=reason=>out.set(l.id,{ok:false,reason});
-  if(L.products.some(p=>p.ndc11===l.ndc11&&L.serialProducts.has(p.abc))){no('Serialized product: each vial has its own serial number, so it must be scanned.');continue;}
   if(!l.lot){no('No lot on the slip. Scan a vial.');continue;}
   if(!l.expiration){no('No expiration on the slip. Scan a vial.');continue;}
   if(l.lot.length>20){no('Lot is longer than 20 characters.');continue;}
-  const m=L.groups.filter(r=>r.supplier_ndc11===l.ndc11||r.scanned_ndc11===l.ndc11);
-  const combos=[...new Map(m.map(r=>[[r.gtin,r.product_abc,r.supplier_ndc11,r.scanned_ndc11].join('|'),r])).values()];
-  if(!combos.length){no('Never received by scan. Scan one vial first so OncoScan learns its barcode.');continue;}
-  if(combos.length>1){no('More than one barcode identity in history. Scan a vial.');continue;}
-  const t=combos[0],p=byAbc.get(t.product_abc);
-  if(L.serialProducts.has(t.product_abc)){no('Serialized product: each vial has its own serial number, so it must be scanned.');continue;}
-  if(!p||p.archived_at){no('Library entry is archived or missing.');continue;}
-  if(L.disabled.has(t.gtin)){no('Package alias is disabled by an administrator.');continue;}
+  const hist=L.groups.filter(r=>r.supplier_ndc11===l.ndc11||r.scanned_ndc11===l.ndc11).sort((a,b)=>String(a.gtin).localeCompare(String(b.gtin)));
+  let t,product=null,newProduct=false;
+  if(hist.length){
+   const h=hist[0];product=byAbc.get(h.product_abc)||null;
+   t={gtin:h.gtin,product_abc:h.product_abc,supplier_ndc11:h.supplier_ndc11,scanned_ndc11:h.scanned_ndc11??null};
+  }else{
+   const forms=ndc10Forms(l.ndc11);
+   if(!forms.length){no('This NDC is not in a format OncoScan can convert. Scan a vial.');continue;}
+   const libs=L.products.filter(p=>p.ndc11===l.ndc11).sort((a,b)=>{const x=rank(a),y=rank(b);return x[0]-y[0]||x[1]-y[1]||String(x[2]).localeCompare(String(y[2]));});
+   if(libs.length){product=libs[0];}else newProduct=true;
+   t={gtin:gtinFromNdc10(forms[0]),product_abc:product?product.abc:null,supplier_ndc11:l.ndc11,scanned_ndc11:l.ndc11};
+  }
+  if(product&&product.archived_at){no('Library entry is archived. An administrator must unarchive it.');continue;}
+  if(!newProduct&&!product){no('Library entry is missing.');continue;}
+  if(L.disabled.has(t.gtin)||(t.product_abc&&L.disabledProducts.has(t.product_abc))){no('A package alias for this product is disabled by an administrator.');continue;}
   const clash=L.groups.some(r=>r.gtin===t.gtin&&r.lot===l.lot&&r.expiration===l.expiration&&(r.product_abc!==t.product_abc||r.supplier_ndc11!==t.supplier_ndc11||(r.scanned_ndc11??null)!==(t.scanned_ndc11??null)));
   if(clash){no('This lot already exists with a different package identity. Scan a vial.');continue;}
-  out.set(l.id,{ok:true,template:{gtin:t.gtin,product_abc:t.product_abc,supplier_ndc11:t.supplier_ndc11,scanned_ndc11:t.scanned_ndc11??null}});
+  out.set(l.id,{ok:true,newProduct,note:newProduct?'Adds this drug to the library from the slip description.':'',template:t});
  }
  return out;
 }
 export async function loadLedger(db){
  const r=await db.batch([
   db.prepare('SELECT DISTINCT gtin,lot,expiration,product_abc,supplier_ndc11,scanned_ndc11 FROM lot_events'),
-  db.prepare('SELECT DISTINCT product_abc FROM events'),
   db.prepare('SELECT abc,ndc11,archived_at FROM products'),
-  db.prepare('SELECT gtin FROM package_aliases WHERE enabled<>1')]);
- return{groups:r[0].results,serialProducts:new Set(r[1].results.map(x=>x.product_abc)),products:r[2].results,disabled:new Set(r[3].results.map(x=>x.gtin))};
+  db.prepare('SELECT gtin,product_abc FROM package_aliases WHERE enabled<>1')]);
+ return{groups:r[0].results,products:r[1].results,disabled:new Set(r[2].results.map(x=>x.gtin)),disabledProducts:new Set(r[2].results.map(x=>x.product_abc))};
+}
+// Used by /api/scan: the lot group created by a manual receipt for this product + lot + expiration (any GTIN on the real vial).
+export async function manualLotGroup(db,productAbc,lot,expiration){
+ return await db.prepare("SELECT gtin,product_abc,supplier_ndc11,scanned_ndc11 FROM lot_events WHERE product_abc=? AND lot=? AND expiration=? AND parse_mode='packing-slip-manual' ORDER BY seq LIMIT 1").bind(productAbc,lot,expiration).first();
 }
 async function openShipment(db,id){
  id=Number(id);need(Number.isInteger(id)&&id>0,'Invalid shipment.');
@@ -108,8 +131,9 @@ async function openShipment(db,id){
 }
 export async function shipmentEligibility(db,id){
  const{lines}=await openShipment(db,id),e=eligibility(lines,await loadLedger(db));
- return{lines:lines.map(l=>({id:l.id,ok:e.get(l.id).ok,reason:e.get(l.id).reason||''}))};
+ return{lines:lines.map(l=>({id:l.id,ok:e.get(l.id).ok,reason:e.get(l.id).reason||'',note:e.get(l.id).note||''}))};
 }
+export const SQL_PRODUCT="INSERT INTO products(abc,description,ndc_original,ndc11,supplier_abc) VALUES(?,?,?,?,NULL) ON CONFLICT(abc) DO NOTHING";
 export const SQL_RECEIVE=`WITH RECURSIVE n(k) AS (SELECT 1 UNION ALL SELECT k+1 FROM n WHERE k<?)
 INSERT INTO lot_events(request_id,request_hash,action,gtin,lot,expiration,product_abc,scanned_ndc11,supplier_ndc11,quantity,raw_scan,parse_mode)
 SELECT ?||'-'||k,?,'RECEIVE',?,?,?,?,?,?,1,?,'packing-slip-manual' FROM n WHERE true
@@ -127,9 +151,15 @@ export async function receiveShipment(db,b){
   need(Number.isInteger(q)&&q>=1&&q<=1000,'Quantity must be 1-1000 per line.');items.push({line,q});
  }
  const elig=eligibility(items.map(i=>i.line),await loadLedger(db)),skipped=[],plan=[];
- for(const{line,q}of items){const e=elig.get(line.id);if(!e.ok){skipped.push({lineId:line.id,reason:e.reason});continue;}plan.push({line,q,t:e.template});}
+ for(const{line,q}of items){const e=elig.get(line.id);if(!e.ok){skipped.push({lineId:line.id,reason:e.reason});continue;}plan.push({line,q,t:e.template,newProduct:e.newProduct});}
  if(!plan.length)return{saved:false,added:0,results:[],skipped};
- const rid=b.requestId.toLowerCase(),statements=[];
+ const rid=b.requestId.toLowerCase(),statements=[],made=new Map();
+ for(const p of plan){ // one library entry per new NDC, created before any receipt that points to it
+  if(!p.newProduct)continue;
+  if(!made.has(p.line.ndc11)){const abc='MANUAL-'+rid+'-'+p.line.ndc11;made.set(p.line.ndc11,abc);statements.push(db.prepare(SQL_PRODUCT).bind(abc,p.line.description,p.line.ndc11,p.line.ndc11));}
+  p.t={...p.t,product_abc:made.get(p.line.ndc11)};
+ }
+ const nProducts=statements.length;
  for(const{line,q,t}of plan){
   const raw='Packing slip receipt (NOT scanned): '+ship.label+' / line '+line.id+' / '+q+' vial(s) entered by a technician';
   const hash=await sha(JSON.stringify([rid,line.id,q,t.gtin,line.lot,line.expiration]));
@@ -138,6 +168,6 @@ export async function receiveShipment(db,b){
  let results;
  try{results=await db.batch(statements);}
  catch(e){throw Object.assign(new Error('Nothing was added: '+String(e.message||e).replace(/^D1_ERROR:\s*/,'')),{code:'RECEIVE_FAILED',status:409});}
- const done=plan.map((p,i)=>({lineId:p.line.id,added:(results[i].meta&&results[i].meta.changes)||0}));
- return{saved:true,replayed:done.every(d=>d.added===0),added:done.reduce((n,d)=>n+d.added,0),results:done,skipped};
+ const done=plan.map((p,i)=>({lineId:p.line.id,added:(results[nProducts+i].meta&&results[nProducts+i].meta.changes)||0}));
+ return{saved:true,replayed:done.every(d=>d.added===0),added:done.reduce((n,d)=>n+d.added,0),libraryEntriesAdded:nProducts,results:done,skipped};
 }
