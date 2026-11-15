@@ -216,6 +216,7 @@ async function checkoff(selectId) {
           const q = numIn(remaining || 1, 1, 1000); q.setAttribute('aria-label', 'Vials to receive'); const go = el('button', 'si-btn si-small', 'Receive'); go.type = 'button';
           go.onclick = () => receive([{ lineId: l.id, quantity: Number(q.value) }], 'Receive ' + q.value + ' vial(s) of ' + l.description + (l.lot ? ' (lot ' + l.lot + ')' : '') + ' into inventory WITHOUT scanning?');
           act.append(mini('Vials', q), go);
+          if (e.note) act.append(el('span', 'si-why', e.note));
         } else if (e) act.append(el('span', 'si-why', 'Scan required: ' + e.reason));
         const ed = el('button', 'si-btn si-small', editing === l.id ? 'Cancel edit' : 'Edit'); ed.type = 'button'; ed.onclick = () => { editing = editing === l.id ? null : l.id; draw(); };
         act.append(ed); row.append(act);
@@ -256,8 +257,9 @@ async function checkoff(selectId) {
     const r = reconcile(cur, activity), items = [], skipped = [];
     for (const l of r.lines) { const rem = l.need - l.received; if (rem <= 0) continue; const e = elig.get(l.id); if (e && e.ok) items.push({ lineId: l.id, quantity: rem }); else skipped.push(l); }
     const vials = items.reduce((n, i) => n + i.quantity, 0);
+    const adds = items.filter(i => (elig.get(i.lineId) || {}).note).length;
     if (!items.length) { note('No outstanding line can be received without scanning (' + skipped.length + ' need a scan).', true); return; }
-    receive(items, 'Add ' + vials + ' vial(s) on ' + items.length + ' line(s) to inventory WITHOUT scanning?' + (skipped.length ? '\n' + skipped.length + ' other line(s) need scanning (serialized, never scanned before, or no lot/expiration) and will be left as they are.' : ''));
+    receive(items, 'Add ' + vials + ' vial(s) on ' + items.length + ' line(s) to inventory WITHOUT scanning?' + (skipped.length ? '\n' + skipped.length + ' other line(s) have no lot or expiration on the slip, so they still need a scan and will be left as they are.' : '') + (adds ? '\n' + adds + ' drug(s) are not in the drug library yet and will be added from the slip description.' : ''));
   };
 
   // Scanning from this screen: always a Receive, through the normal scan form (same checks as the Scan tab).

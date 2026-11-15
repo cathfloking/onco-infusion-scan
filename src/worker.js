@@ -2,7 +2,7 @@ import {need,parseScan,ndcCandidates,productRow,manualNDC,publicProduct} from '.
 import {contextFor,resolveProduct,requestRecord,aliasDisabled} from './matching.js';
 import {SERIAL_INVENTORY,LOT_INVENTORY,SERIAL_ACTIVITY,LOT_ACTIVITY,ADJ_ACTIVITY} from './queries.js';
 import {adminActor,adminData,updateProduct,setArchived,setAliasEnabled,adjustInventory,editInventory} from './admin.js';
-import {listShipments,saveShipment,setShipmentStatus,updateLine,receiveShipment,shipmentEligibility} from './shipments.js';
+import {listShipments,saveShipment,setShipmentStatus,updateLine,receiveShipment,shipmentEligibility,manualLotGroup} from './shipments.js';
 const VERSION='prototype-0.7.0';
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY'}});
 async function hash(s){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))).map(v=>v.toString(16).padStart(2,'0')).join('');}
@@ -114,21 +114,24 @@ export default{
    async function replay(prior){need(prior.request_hash===requestHash,'Request ID reused with different content.');const product=await env.DB.prepare('SELECT * FROM products WHERE abc=?').bind(prior.product_abc).first();return json({saved:true,replayed:true,...p,product:publicProduct(product)});}
    const prior=await requestRecord(env.DB,b.requestId);if(prior)return await replay(prior);
    const c=await contextFor(env.DB,p);
-   if(p.serial!==null&&!c.existing)need(b.action==='RECEIVE','This serialized vial has not been received.','UNKNOWN_VIAL');
+   // Lot-level stock from a packing-slip receipt: a vial with no record of its own (serialized or not, whatever GTIN it carries)
+   // is pulled or returned against the manual lot group for the same product + lot + expiration.
+   const fb=(b.action!=='RECEIVE'&&!c.existing&&c.product)?await manualLotGroup(env.DB,c.product.abc,p.lot,p.expiration):null;
+   if(p.serial!==null&&!c.existing&&!fb)need(b.action==='RECEIVE','This serialized vial has not been received.','UNKNOWN_VIAL');
    // Disabled alias blocks every NEW receipt of this GTIN, including into an existing lot group. Pull/Return of recorded stock continue.
    need(!(c.reason==='ALIAS_DISABLED'||(b.action==='RECEIVE'&&await aliasDisabled(env.DB,p.gtin))),'This GTIN\'s package alias is disabled by an administrator. No inventory saved.','ALIAS_DISABLED',409);
    need(!(b.action==='RECEIVE'&&c.product&&c.product.archived_at),'This library entry is archived; new receipts are blocked. Pull and Return of existing stock still work. No inventory saved.','PRODUCT_ARCHIVED',409);
    need(c.product,c.reason==='AMBIGUOUS_MATCH'?'More than one NDC matches; resolve the package.':'Product not found; add a product or verified package alias.',c.reason||'UNKNOWN_PRODUCT',409,{parsed:p,candidates:c.candidates,ndc10:c.ndc10,matches:c.matches||[],suggestions:c.suggestions||[]});
    const product=c.product,supplierNDC=c.supplier_ndc11||product.ndc11;
    try{
-    if(p.serial!==null){
+    if(p.serial!==null&&!fb){
      await env.DB.batch([
       env.DB.prepare('INSERT INTO events(request_id,request_hash,action,gtin,serial,lot,expiration,product_abc,raw_scan) VALUES(?,?,?,?,?,?,?,?,?)').bind(b.requestId,requestHash,b.action,p.gtin,p.serial,p.lot,p.expiration,product.abc,b.raw),
       env.DB.prepare('INSERT INTO event_packages(event_seq,scanned_ndc11,supplier_ndc11,parse_mode) SELECT seq,?,?,? FROM events WHERE request_id=?').bind(c.scanned_ndc11??null,supplierNDC,p.parseMode,b.requestId)
      ]);
     }else{
      await env.DB.prepare('INSERT INTO lot_events(request_id,request_hash,action,gtin,lot,expiration,product_abc,scanned_ndc11,supplier_ndc11,quantity,raw_scan,parse_mode) VALUES(?,?,?,?,?,?,?,?,?,1,?,?)')
-      .bind(b.requestId,requestHash,b.action,p.gtin,p.lot,p.expiration,product.abc,c.scanned_ndc11??null,supplierNDC,b.raw,p.parseMode).run();
+      .bind(b.requestId,requestHash,b.action,fb?fb.gtin:p.gtin,p.lot,p.expiration,product.abc,fb?(fb.scanned_ndc11??null):(c.scanned_ndc11??null),fb?fb.supplier_ndc11:supplierNDC,b.raw,fb?'lot-fallback':p.parseMode).run();
     }
    }catch(error){const saved=await requestRecord(env.DB,b.requestId);if(saved)return await replay(saved);throw error;}
    return json({saved:true,...p,product:publicProduct(product),scanned_ndc11:c.scanned_ndc11,supplier_ndc11:supplierNDC,quantity:1});
