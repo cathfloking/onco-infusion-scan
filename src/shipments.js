@@ -16,7 +16,7 @@ function cleanLine(l,n){
  const q=Number(l.expectedQty),v=Number(l.vialsPerUnit??1);
  need(Number.isInteger(q)&&q>=1&&q<=10000,n+': quantity must be 1-10000.');
  need(Number.isInteger(v)&&v>=1&&v<=1000,n+': vials per unit must be 1-1000.');
- return{order_no:txt(l.orderNo,60,n),box_id:txt(l.boxId,60,n),po:txt(l.po,60,n),storage:txt(l.storage,60,n),item_no:txt(l.itemNo,30,n),ndc11,description,lot,expiration,expected_qty:q,vials_per_unit:v,flags:txt(l.flags,100,n)};
+ return{order_no:txt(l.orderNo,200,n+' order numbers'),box_id:txt(l.boxId,1000,n+' box IDs'),po:txt(l.po,60,n+' PO'),storage:txt(l.storage,60,n+' storage'),item_no:txt(l.itemNo,30,n+' item'),ndc11,description,lot,expiration,expected_qty:q,vials_per_unit:v,flags:txt(l.flags,100,n+' flags')};
 }
 export function cleanShipment(b){
  need(b&&typeof b==='object','Invalid request.');
