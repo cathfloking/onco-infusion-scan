@@ -1,10 +1,10 @@
 <!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0f8f86"><title>OncoScan</title>
-<link rel="stylesheet" href="/styles.css"><script src="/theme.js"></script>
-<script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script><script defer src="/app.js"></script><script defer src="/camera-scan.js"></script><script defer src="/slip-parse.js"></script><script defer src="/slip-import.js"></script>
+<link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/recon.css"><script src="/theme.js"></script>
+<script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script><script defer src="/app.js"></script><script defer src="/camera-scan.js"></script><script defer src="/slip-parse.js"></script><script defer src="/slip-import.js"></script><script defer src="/recon-core.js"></script><script defer src="/recon-ui.js"></script>
 </head><body>
-<svg class="sprite" aria-hidden="true" focusable="false"><symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol><symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></symbol><symbol id="i-scan" viewBox="0 0 24 24"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><path d="M8 8.5v7M11 8.5v7M13.5 8.5v7M16 8.5v7"/></symbol><symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol><symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></symbol><symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol></svg>
+<svg class="sprite" aria-hidden="true" focusable="false"><symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol><symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></symbol><symbol id="i-scan" viewBox="0 0 24 24"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><path d="M8 8.5v7M11 8.5v7M13.5 8.5v7M16 8.5v7"/></symbol><symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol><symbol id="i-recon" viewBox="0 0 24 24"><path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h4M9 11h6"/><path d="m9 16.2 2 2 4-4.2"/></symbol><symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></symbol><symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol></svg>
 <header class="top">
 <a class="brand" href="#home" aria-label="OncoScan home"><svg class="logo" viewBox="0 0 40 24" aria-hidden="true"><polyline points="1,13 9,13 13,4 19,21 24,9 27,13 39,13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="brand-text"><b>Onco</b><span>Scan</span></span></a>
 <button id="gear" class="iconbtn" type="button" aria-label="Settings" aria-expanded="false" aria-controls="settings"><svg class="ico" aria-hidden="true"><use href="#i-gear"/></svg></button>
@@ -19,9 +19,9 @@
 <a class="card card-scan span-wide" href="#scan"><div class="card-head"><span class="emoji" aria-hidden="true">&#128247;</span><h2>Scan</h2><span class="chev" aria-hidden="true">&#8250;</span></div><p class="big small-big">Receive &middot; Pull &middot; Return</p><p class="muted">One individual vial per scan. Tap to start scanning.</p></a>
 <a class="card span-wide" href="#inventory"><div class="card-head"><span class="emoji" aria-hidden="true">&#128230;</span><h2>Inventory</h2><span class="chev" aria-hidden="true">&#8250;</span></div><p class="big"><span id="hIn">-</span> <span class="unit">in stock</span></p>
 <p class="muted"><b id="hOut">-</b> Out &nbsp;|&nbsp; <b id="hExp">-</b> expiring within 90 days</p><p id="hExpired" class="warn" hidden></p></a>
-<a class="card" href="#activity"><div class="card-head"><span class="emoji" aria-hidden="true">&#128339;</span><h2>Activity</h2><span class="chev" aria-hidden="true">&#8250;</span></div><p class="big small-big" id="hLast">-</p><p class="muted" id="hToday"></p></a>
+<a class="card" href="#reconcile"><div class="card-head"><span class="emoji" aria-hidden="true">&#129534;</span><h2>Reconcile</h2><span class="chev" aria-hidden="true">&#8250;</span></div><p class="big small-big">Order &middot; Invoice &middot; Slip</p><p class="muted">Three-way match with Excel report.</p></a>
 <a class="card" href="#library"><div class="card-head"><span class="emoji" aria-hidden="true">&#128138;</span><h2>Drug library</h2><span class="chev" aria-hidden="true">&#8250;</span></div><p class="big"><span id="hLib">-</span> <span class="unit">entries</span></p><p class="muted" id="hArchived"></p></a>
-<a class="card mobile-wide" href="#more"><div class="card-head"><span class="emoji" aria-hidden="true">&#128736;&#65039;</span><h2>More</h2><span class="chev" aria-hidden="true">&#8250;</span></div><p class="big small-big">Admin &amp; about</p><p class="muted" id="hAdmin">Admin tools locked</p></a>
+<a class="card mobile-wide" href="#more"><div class="card-head"><span class="emoji" aria-hidden="true">&#128736;&#65039;</span><h2>More</h2><span class="chev" aria-hidden="true">&#8250;</span></div><p class="big small-big">Activity, admin &amp; about</p><p class="muted">Last activity: <b id="hLast">-</b> &nbsp;|&nbsp; <b id="hToday"></b></p><p class="muted" id="hAdmin">Admin tools locked</p></a>
 </div></section>
 
 <section class="view" id="view-scan" hidden>
@@ -57,11 +57,33 @@
 <p class="muted hint">Click a column heading to sort.<span id="adminEditHint"> Administrators can edit any row.</span></p>
 <p id="count" class="muted"></p><div id="inventory" class="scroll"></div></div></section>
 
-<section class="view" id="view-activity" hidden>
-<h1 class="page-title">Recent activity</h1>
-<div class="panel"><div class="row"><label class="field grow">Search<input id="actSearch" type="text" placeholder="Medication, lot, serial, action..."></label>
-<label class="field">Action<select id="actFilter"><option value="">All</option><option value="RECEIVE">Receive</option><option value="PULL">Pull</option><option value="RETURN">Return</option><option value="ADJUST">Adjustments</option></select></label></div>
-<p class="muted hint">Latest 100 entries as originally scanned. Times in Eastern time (EST/EDT). Click a heading to sort.</p><div id="activity" class="scroll"></div></div></section>
+<section class="view" id="view-reconcile" hidden>
+<h1 class="page-title">Reconcile</h1>
+<div class="panel">
+<p class="muted rc-intro">Check a supplier order against its invoices and packing slips: quantities, dollar amounts and what arrived. PDFs are read in this browser only. Nothing is uploaded or saved.</p>
+<div class="rc-drops">
+<div class="rc-drop" data-kind="order"><div class="rc-drop-head"><span class="emoji" aria-hidden="true">&#128203;</span><h2>1. Order history</h2></div><p class="muted">Order history report PDF(s), for example chemo and nonchemo.</p><button class="btn small rc-pick" type="button">Choose PDFs</button><input class="rc-input" type="file" accept="application/pdf,.pdf" multiple hidden><ul class="rc-files"></ul></div>
+<div class="rc-drop" data-kind="invoice"><div class="rc-drop-head"><span class="emoji" aria-hidden="true">&#129534;</span><h2>2. Invoices</h2></div><p class="muted">One or more supplier invoice PDFs for the same order(s).</p><button class="btn small rc-pick" type="button">Choose PDFs</button><input class="rc-input" type="file" accept="application/pdf,.pdf" multiple hidden><ul class="rc-files"></ul></div>
+<div class="rc-drop" data-kind="slip"><div class="rc-drop-head"><span class="emoji" aria-hidden="true">&#128196;</span><h2>3. Packing slips</h2></div><p class="muted">Optional. Adds the received-quantity check.</p><button class="btn small rc-pick" type="button">Choose PDFs</button><input class="rc-input" type="file" accept="application/pdf,.pdf" multiple hidden><ul class="rc-files"></ul></div>
+</div>
+<div class="row"><button id="rcRun" class="btn primary" type="button" disabled>Run 3-way match</button><button id="rcExport" class="btn excel" type="button" disabled>Export Excel</button><button id="rcClear" class="btn" type="button">Clear all</button></div>
+<p id="rcNeed" class="muted rc-need"></p>
+<p id="rcStatus" class="status" role="status" aria-live="polite"></p>
+</div>
+<div id="rcResults" hidden>
+<div id="rcStats" class="rc-stats"></div>
+<p id="rcVerdict" class="rc-verdict" role="status"></p>
+<div class="panel rc-panel" id="rcWarnPanel" hidden><h2>Notes from reading the files</h2><ul id="rcWarn" class="rc-warnlist"></ul></div>
+<div class="panel rc-panel"><h2>Line audit</h2>
+<div class="row"><label class="field grow">Search<input id="rcSearch" type="text" placeholder="Medication, NDC, issue..." autocomplete="off"></label>
+<label class="field">Show<select id="rcFilter"><option value="">All lines</option><option value="attention">Needs attention</option><option value="MISMATCH">Mismatch only</option><option value="REVIEW">Review only</option><option value="MATCH">Match only</option></select></label></div>
+<p class="muted hint">MISMATCH is a quantity, price or dollar difference, a drug that was not ordered, or fewer vials on the slip than ordered. REVIEW means the slip lists the same drug under another order number. Click a heading to sort.</p>
+<p id="rcCount" class="muted"></p><div id="rcLines" class="scroll"></div></div>
+<div class="panel rc-panel"><h2>Totals check</h2><p class="muted hint">Order history total against invoice total for each PO, then each document's stated total against the sum of its own lines.</p>
+<div id="rcPOs" class="scroll"></div><div id="rcDocs" class="scroll"></div></div>
+<div class="panel rc-panel" id="rcOtherPanel" hidden><h2>On the slips for other orders</h2><p class="muted hint">Slip lines whose order number is not one of the uploaded orders and whose drug is not on them. Shown for information; they do not affect any status.</p><div id="rcOther" class="scroll"></div></div>
+</div>
+</section>
 
 <section class="view" id="view-more" hidden>
 <h1 class="page-title">More</h1>
@@ -74,6 +96,14 @@
 <label class="check"><input id="libArchived" type="checkbox"> Show archived entries</label>
 <p id="libCount" class="muted"></p><div id="library" class="scroll"></div>
 <p class="muted">Click a heading to sort. Administrators can edit entries after unlocking below.</p></div></div></div></div>
+<div class="card acc" id="actAcc">
+<div class="acc-row"><button id="actToggle" class="acc-head" type="button" aria-expanded="false" aria-controls="actBody"><span class="emoji" aria-hidden="true">&#128339;</span><span class="acc-title">Activity<small class="muted">Latest 100 entries</small></span></button>
+<button id="actChev" class="chev acc-chev" type="button" aria-label="Expand or collapse activity" aria-expanded="false" aria-controls="actBody">&#8250;</button></div>
+<div id="actBody" class="acc-body"><div class="acc-inner"><div class="acc-pad">
+<div class="row"><label class="field grow">Search<input id="actSearch" type="text" placeholder="Medication, lot, serial, action..."></label>
+<label class="field">Action<select id="actFilter"><option value="">All</option><option value="RECEIVE">Receive</option><option value="PULL">Pull</option><option value="RETURN">Return</option><option value="ADJUST">Adjustments</option></select></label></div>
+<p class="muted hint">Latest 100 entries as originally scanned. Times in Eastern time (EST/EDT). Click a heading to sort.</p><div id="activity" class="scroll"></div>
+</div></div></div></div>
 <div class="card admin-card" id="adminCard">
 <div id="adminLocked"><div class="card-head"><span class="emoji" aria-hidden="true">&#128272;</span><h2>Administrator</h2></div>
 <p class="muted">Sign in to edit the drug library, package aliases, inventory records and quantities, and to upload libraries.</p>
@@ -124,7 +154,7 @@
 <a href="#home" data-tab="home"><svg class="ico" aria-hidden="true"><use href="#i-home"/></svg><span class="lbl">Home</span></a>
 <a href="#inventory" data-tab="inventory"><svg class="ico" aria-hidden="true"><use href="#i-box"/></svg><span class="lbl">Inventory</span></a>
 <a href="#scan" data-tab="scan" class="scan"><span class="bubble"><svg class="ico" aria-hidden="true"><use href="#i-scan"/></svg></span><span class="lbl">Scan</span></a>
-<a href="#activity" data-tab="activity"><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg><span class="lbl">Activity</span></a>
+<a href="#reconcile" data-tab="reconcile"><svg class="ico" aria-hidden="true"><use href="#i-recon"/></svg><span class="lbl">Reconcile</span></a>
 <a href="#more" data-tab="more"><svg class="ico" aria-hidden="true"><use href="#i-more"/></svg><span class="lbl">More</span></a>
 </nav>
 </body></html>
