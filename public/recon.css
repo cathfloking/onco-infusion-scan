@@ -1,0 +1,38 @@
+/* OncoScan Reconcile tab. Uses the site's variables and components (styles.css: .panel, .card, .btn, .badge, tables). */
+#view-reconcile [hidden]{display:none!important}
+#view-reconcile .panel h2{font-size:1.1rem}
+.rc-intro{margin:0 0 4px}
+.rc-drops{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:14px 0}
+.rc-drop{min-width:0;border:1.5px dashed var(--line);border-radius:18px;padding:14px 16px;background:var(--card);transition:border-color .2s,background .2s}
+.rc-drop.has{border-style:solid}
+.rc-drop.over{border-color:var(--teal);background:var(--teal-soft)}
+.rc-drop-head{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.rc-drop-head h2{font-size:1.05rem}
+.rc-drop .emoji{font-size:1.6rem}
+.rc-drop .btn{margin-top:6px}
+.rc-files{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.rc-files li{display:flex;align-items:center;gap:8px;min-width:0;padding:6px 6px 6px 10px;border:1px solid var(--line);border-radius:12px;background:var(--head);font-size:.85rem}
+.rc-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rc-need{margin:.2rem 0 0;font-size:.9rem}
+.rc-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:14px 0}
+.rc-stats .card{padding:12px 16px}
+.rc-stats .card h2{font-size:.95rem;color:var(--muted)}
+.rc-stats .big{margin:.3rem 0 0}
+.rc-ok .big{color:var(--ok)}.rc-warn .big{color:var(--warn)}.rc-bad .big{color:var(--danger)}
+.rc-verdict{border:1px solid var(--line);border-left-width:6px;border-radius:16px;padding:12px 16px;margin:0 0 14px;background:var(--card);font-weight:600}
+.rc-verdict.ok{border-left-color:var(--ok)}.rc-verdict.review{border-left-color:var(--warn)}.rc-verdict.bad{border-left-color:var(--danger)}
+.rc-panel{margin-top:14px}
+.rc-warnlist{margin:.4rem 0 0;padding-left:1.2rem;color:var(--warn);font-weight:600}
+.badge-match{background:rgba(23,121,74,.15);color:var(--ok)}
+.badge-mismatch{background:rgba(179,38,30,.14);color:var(--danger)}
+.badge-review{background:rgba(168,95,0,.16);color:var(--warn)}
+@media(min-width:941px){
+ tr.rc-mismatch td:first-child{box-shadow:inset 4px 0 0 var(--danger)}
+ tr.rc-review td:first-child{box-shadow:inset 4px 0 0 var(--warn)}
+}
+@media(max-width:940px){
+ .rc-drops{grid-template-columns:1fr}
+ .rc-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+ tr.rc-mismatch{border-color:var(--danger)}tr.rc-review{border-color:var(--warn)}
+ #activity.scroll,#rcLines.scroll{max-height:60vh;overflow:auto}
+}
