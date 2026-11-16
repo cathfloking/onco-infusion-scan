@@ -1,5 +1,5 @@
 const $=id=>document.getElementById(id);
-const VIEWS=['home','scan','inventory','activity','more'];
+const VIEWS=['home','scan','inventory','reconcile','more'];
 let data={products:[],inventory:[],activity:[],version:''},previewRows=[],busy=false,pending=null,unknownContext=null,lastRefresh=0,view='home',libTimer;
 let adminCred=null,admin={products:[],aliases:[],audit:[],lots:[]},aliasEditing=null,adjusting=null,adminBusy=false;
 async function api(path,body,headers){
@@ -116,6 +116,10 @@ function setLibrary(open){
  clearTimeout(libTimer);if(open)renderLibrary();else libTimer=setTimeout(()=>{if(!libOpen())$('library').replaceChildren();},450);
 }
 for(const id of ['libToggle','libChev'])$(id).addEventListener('click',()=>setLibrary(!libOpen()));
+// Activity accordion (More tab). The table is always built, so only the open state changes.
+const actOpen=()=>$('actAcc').classList.contains('open');
+function setActivity(open){$('actAcc').classList.toggle('open',open);for(const id of ['actToggle','actChev'])$(id).setAttribute('aria-expanded',String(open));}
+for(const id of ['actToggle','actChev'])$(id).addEventListener('click',()=>setActivity(!actOpen()));
 function renderAll(){renderHome();renderInventory();renderActivity();renderLibrary();}
 async function refresh(){data=await api('/api/data');lastRefresh=Date.now();renderAll();}
 // Dock: a single highlight slides to the selected tab.
@@ -141,15 +145,16 @@ function initSeg(seg){
 }
 for(const seg of document.querySelectorAll('.seg'))initSeg(seg);
 function show(name){
- const openLibrary=name==='library';if(openLibrary)name='more';
+ const openLibrary=name==='library',openActivity=name==='activity';if(openLibrary||openActivity)name='more';
  if(!VIEWS.includes(name))name='home';view=name;
  for(const v of VIEWS)$('view-'+v).hidden=v!==name;
  for(const a of document.querySelectorAll('.dock a'))a.setAttribute('aria-current',a.dataset.tab===name?'page':'false');
  placeIndicator();
  window.scrollTo(0,0);
  if(openLibrary){setLibrary(true);setTimeout(()=>$('libAcc').scrollIntoView({block:'start',behavior:'smooth'}),60);}
+ if(openActivity){setActivity(true);setTimeout(()=>$('actAcc').scrollIntoView({block:'start',behavior:'smooth'}),60);}
  if(name==='scan')setTimeout(()=>$('raw').focus(),0);
- else if(['home','inventory','activity','more'].includes(name)&&Date.now()-lastRefresh>30000)refresh().catch(e=>toast(e.message,true));
+ else if(['home','inventory','more'].includes(name)&&Date.now()-lastRefresh>30000)refresh().catch(e=>toast(e.message,true));
 }
 window.addEventListener('hashchange',()=>show(location.hash.slice(1)));
 // Settings and theme
