@@ -13,10 +13,10 @@
   var K_SQ = 1000, C_SQ = 14, SQ_GAIN = 0.016, SQ_MAX = 0.45;
   var BOND_K = 120000, BOND_C = 3000, BOND_MAX = 3, BOND_BREAK = 1.9, BOND_WAKE = 400000;
   var RBC = [
-    ['#c8505c', '#a42232', '#7c1323', '#4f0813'],
-    ['#d05f68', '#ac2a38', '#85182a', '#560b18'],
-    ['#be4452', '#9b1d2d', '#751020', '#490711'],
-    ['#cc5560', '#a82633', '#7e1525', '#520a16']
+    ['#e8505c', '#d4202f', '#b01020', '#760912'],
+    ['#ee5f69', '#dc2a38', '#b9162a', '#7e0d1b'],
+    ['#e24654', '#cc1d2d', '#a80f1f', '#700810'],
+    ['#ec5560', '#d82633', '#b21525', '#78091a']
   ];
   var taps = [], running = false, show = null;
 
@@ -354,7 +354,7 @@
         el.type = 'button';
         el.textContent = 'Cathflo';
         el.setAttribute('aria-label', 'Drop a Cathflo syringe bomb');
-        el.style.cssText = 'padding:.6rem 1.05rem;border-radius:999px;border:2px solid #fff;background:#d92d20;color:#fff;font-family:inherit;font-weight:800;font-size:1rem;letter-spacing:.06em;box-shadow:0 6px 18px rgba(217,45,32,.5);cursor:pointer;touch-action:manipulation;pointer-events:auto';
+        el.style.cssText = 'padding:.6rem 1.05rem;border-radius:999px;border:2px solid #fff;background:#14d4e6;color:#032b33;font-family:inherit;font-weight:800;font-size:1rem;letter-spacing:.06em;box-shadow:0 6px 18px rgba(20,212,230,.55);cursor:pointer;touch-action:manipulation;pointer-events:auto';
         el.addEventListener('click', pressBtn.bind(null, el));
         box.appendChild(el);
         btns.push(el);
@@ -487,7 +487,7 @@
       ctx.restore();
     }
 
-    /* Cathflo syringe bomb: glass barrel full of bright red liquid, plunger, hub, needle, and a fuse on the thumb pad. */
+    /* Cathflo syringe bomb: glass barrel full of bright aqua blue liquid, plunger, hub, needle, and a fuse on the thumb pad. */
     function drawBomb(b) {
       var r = b.r, bx0 = -r * 0.5, bw = r * 1.2, hh = r * 0.36, by0 = -hh, bh = hh * 2;
       ctx.save();
@@ -507,7 +507,7 @@
       ctx.save();
       rrPath(bx0, by0, bw, bh, r * 0.1);
       ctx.clip();
-      drawFluid(b, bx0 + bw / 2, 0, bw, bh, 0.82, '#e3112c', 0.5);
+      drawFluid(b, bx0 + bw / 2, 0, bw, bh, 0.82, '#14d4e6', 0.5);
       ctx.fillStyle = 'rgba(255,255,255,0.45)';
       ctx.fillRect(bx0 + bw * 0.05, by0 + bh * 0.12, bw * 0.9, bh * 0.14);
       ctx.fillStyle = '#4b5a64';
