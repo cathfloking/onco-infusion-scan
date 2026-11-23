@@ -156,6 +156,21 @@
       }
     }
 
+    /* Fluid in the IV bag: a lightweight slosh model, not a full fluid simulation.
+       The surface stays level in the world while the bag tumbles. A spring-damper tilts it when the bag is pushed
+       sideways, and floor impacts start a decaying surface wave. */
+    function slosh(b, h) {
+      var dvx = b.vx - b.pvx, dvy = b.vy - b.pvy - BOMB_GRAV * h;
+      b.pvx = b.vx; b.pvy = b.vy;
+      b.sv -= dvx * 0.02;
+      if (dvy < -60) b.wa = Math.min(b.r * 0.3, b.wa + b.r * Math.min(0.25, -dvy / 7000));
+      b.sv += (-70 * b.s - 3.2 * b.sv) * h;
+      b.s += b.sv * h;
+      if (b.s > 0.9) { b.s = 0.9; if (b.sv > 0) b.sv = 0; } else if (b.s < -0.9) { b.s = -0.9; if (b.sv < 0) b.sv = 0; }
+      b.wp += 16 * h;
+      b.wa *= 1 - 2.4 * h;
+    }
+
     function step(h, el) {
       var k, m, b, it, dv, dw;
       simT += h;
@@ -163,6 +178,7 @@
         b = balls[k];
         if (b.gone || b.sleep) continue;
         if (!b.live) { if (el >= b.at) b.live = true; else continue; }
+        if (b.bomb) slosh(b, h);
         b.vy += (b.bomb ? BOMB_GRAV : G) * h;
         b.vx *= 1 - 0.1 * h;
         b.w *= 1 - 0.1 * h;
@@ -292,8 +308,10 @@
       var b = {
         x: W * 0.2 + Math.random() * W * 0.6, y: -r - 10, vx: (Math.random() - 0.5) * 60, vy: BOMB_V,
         r: r, m: BOMB_M * r * r, a: 0, w: 0, at: 0, live: true, gone: false, floor: false, touch: false,
-        sleep: false, rest: 0, freed: false, bomb: true, hitAt: null, bounces: 0, born: simT, fuse: tFall + SINK_S
+        sleep: false, rest: 0, freed: false, bomb: true, hitAt: null, bounces: 0, born: simT, fuse: tFall + SINK_S,
+        s: 0, sv: 0, wa: 0, wp: 0, pvx: 0, pvy: BOMB_V
       };
+      b.pvx = b.vx;
       bombs.push(b);
       balls.push(b);
     }
@@ -393,8 +411,28 @@
       ctx.save();
       bagPath(x0, y0, bw, bh, r * 0.28);
       ctx.clip();
-      ctx.fillStyle = '#f2c14e';
-      ctx.fillRect(x0, y0 + bh * 0.3, bw, bh * 0.7);
+      /* Fluid: bright red like doxorubicin. Surface is level in the world frame (rotate back by the bag angle). */
+      var sa = b.s + b.a, dnx = Math.sin(sa), dny = Math.cos(sa), tnx = Math.cos(sa), tny = -Math.sin(sa);
+      var lev = bh * 0.2, span = bw * 1.5, nPts = 14, sx = [], sy = [], j;
+      for (j = 0; j <= nPts; j++) {
+        var u = -span + (2 * span * j) / nPts, wv = b.wa * Math.sin((u / r) * 2.6 + b.wp);
+        sx.push(-dnx * (lev + wv) + tnx * u);
+        sy.push(-dny * (lev + wv) + tny * u);
+      }
+      ctx.beginPath();
+      ctx.moveTo(sx[0], sy[0]);
+      for (j = 1; j <= nPts; j++) ctx.lineTo(sx[j], sy[j]);
+      ctx.lineTo(sx[nPts] + dnx * bh * 2, sy[nPts] + dny * bh * 2);
+      ctx.lineTo(sx[0] + dnx * bh * 2, sy[0] + dny * bh * 2);
+      ctx.closePath();
+      ctx.fillStyle = '#e3112c';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(sx[0], sy[0]);
+      for (j = 1; j <= nPts; j++) ctx.lineTo(sx[j], sy[j]);
+      ctx.strokeStyle = 'rgba(255,200,200,0.7)';
+      ctx.lineWidth = 1.3;
+      ctx.stroke();
       ctx.fillStyle = 'rgba(255,255,255,0.4)';
       ctx.fillRect(x0 + bw * 0.12, y0, bw * 0.12, bh);
       ctx.fillStyle = '#ffffff';
