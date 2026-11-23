@@ -10,11 +10,13 @@
   var BTN_DELAY = 1000, DWELL = 1, BLAST = 3400, LIFT = 1200, MAXB = 3600;
   var BOMB_R = 26, BOMB_M = 60, BOMB_GRAV = 4500, BOMB_V = 500, SINK_S = 2, UPBIAS = 0.3;
   var BOMB_E = 0.2, BOMB_BOUNCES = 2, BOMB_MIN_V = 150;
+  var K_SQ = 1000, C_SQ = 14, SQ_GAIN = 0.016, SQ_MAX = 0.45;
+  var BOND_K = 120000, BOND_C = 3000, BOND_MAX = 3, BOND_BREAK = 1.9, BOND_WAKE = 400000;
   var RBC = [
-    ['#f19aa1', '#e2505c', '#c8202f', '#8f1220'],
-    ['#f4a3a8', '#e5606a', '#d02a38', '#98162a'],
-    ['#ee8c94', '#d9404e', '#b81c2c', '#82101e'],
-    ['#f7b0b4', '#ea6c75', '#d83a46', '#a01a2c']
+    ['#c8505c', '#a42232', '#7c1323', '#4f0813'],
+    ['#d05f68', '#ac2a38', '#85182a', '#560b18'],
+    ['#be4452', '#9b1d2d', '#751020', '#490711'],
+    ['#cc5560', '#a82633', '#7e1525', '#520a16']
   ];
   var taps = [], running = false, show = null;
 
@@ -60,6 +62,7 @@
     document.documentElement.style.touchAction = 'none';
 
     var balls = [], bombs = [], fxs = [], btns = [], box = null, btnArmed = true, ceilOn = false;
+    var bonds = [], bondSet = {}, uid = 0, noBond = false;
     var t0 = performance.now(), last = t0, floorOn = true, calm = 0, acc = 0, raf = 0, lp = null, simT = 0, setAt = 0;
 
     function spawnSet(base) {
@@ -71,6 +74,7 @@
           r: r, m: r * r, a: Math.random() * 6.28, w: (Math.random() - 0.5) * 6,
           at: base + (i * SPAWN) / COUNT + Math.random() * 40,
           rc: RBC[Math.floor(Math.random() * RBC.length)],
+          id: ++uid, nb: 0, e: 0, f: 0, ev: 0, fv: 0,
           live: false, gone: false, floor: false, touch: false, sleep: false, rest: 0, freed: false, bomb: false
         });
       }
@@ -81,7 +85,7 @@
       add: function () {
         var el = performance.now() - t0;
         show.sets++;
-        setAt = el; calm = 0; btnArmed = true; ceilOn = false;
+        setAt = el; calm = 0; btnArmed = true; ceilOn = false; noBond = false;
         spawnSet(el);
         if (!floorOn) {
           floorOn = true;
@@ -93,6 +97,55 @@
         }
       }
     };
+
+    /* Squish: each cell has a stretch (e, f) that behaves like a spring. An impact along a normal flattens the cell
+       along that normal and stretches it sideways, then it wobbles back. */
+    function squish(b, nx, ny, s) {
+      if (b.bomb || s < 40) return;
+      var g = Math.min(s, 1500) * SQ_GAIN;
+      b.ev -= g * (nx * nx - ny * ny);
+      b.fv -= g * 2 * nx * ny;
+    }
+    function wob(b, h) {
+      b.ev += (-K_SQ * b.e - C_SQ * b.ev) * h;
+      b.e += b.ev * h;
+      b.fv += (-K_SQ * b.f - C_SQ * b.fv) * h;
+      b.f += b.fv * h;
+      var m = Math.hypot(b.e, b.f);
+      if (m > SQ_MAX) { b.e *= SQ_MAX / m; b.f *= SQ_MAX / m; }
+    }
+
+    /* Stickiness: cells that collide get a springy bond (up to BOND_MAX each). Bonds tear if stretched too far
+       and are all broken by a Cathflo explosion. */
+    function bond(p, q, rest) {
+      if (noBond || p.bomb || q.bomb || p.nb >= BOND_MAX || q.nb >= BOND_MAX) return;
+      var key = p.id < q.id ? p.id * 100000 + q.id : q.id * 100000 + p.id;
+      if (bondSet[key]) return;
+      bondSet[key] = 1;
+      p.nb++; q.nb++;
+      bonds.push({ p: p, q: q, rest: rest, key: key });
+    }
+    function dropBond(i) {
+      var bd = bonds[i];
+      bd.p.nb--; bd.q.nb--;
+      delete bondSet[bd.key];
+      bonds.splice(i, 1);
+    }
+    function bondForces(h) {
+      for (var i = bonds.length - 1; i >= 0; i--) {
+        var bd = bonds[i], p = bd.p, q = bd.q;
+        var dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy) || 0.001;
+        if (p.gone || q.gone || d > bd.rest * BOND_BREAK) { dropBond(i); continue; }
+        if (p.sleep && q.sleep) continue;
+        var nx = dx / d, ny = dy / d;
+        var rv = (q.vx - p.vx) * nx + (q.vy - p.vy) * ny;
+        var F = BOND_K * (d - bd.rest) + BOND_C * rv;
+        if (Math.abs(F) > BOND_WAKE) { wake(p); wake(q); }
+        var ip = p.sleep ? 0 : 1 / p.m, iq = q.sleep ? 0 : 1 / q.m;
+        p.vx += nx * F * ip * h; p.vy += ny * F * ip * h;
+        q.vx -= nx * F * iq * h; q.vy -= ny * F * iq * h;
+      }
+    }
 
     function collide(p, q) {
       var dx = q.x - p.x, dy = q.y - p.y, min = p.r + q.r, d2 = dx * dx + dy * dy;
@@ -114,6 +167,9 @@
         jn = (-(1 + bounce(E_BALL, -vn)) * vn) / sum;
         p.vx -= jn * ip * nx; p.vy -= jn * ip * ny;
         q.vx += jn * iq * nx; q.vy += jn * iq * ny;
+        squish(p, nx, ny, -vn);
+        squish(q, nx, ny, -vn);
+        if (vn < -8) bond(p, q, min);
       }
       var tx = -ny, ty = nx;
       var vt = (p.vx - q.vx) * tx + (p.vy - q.vy) * ty + p.w * p.r + q.w * q.r;
@@ -130,14 +186,15 @@
         var b = balls[k];
         if (!b.live || b.gone || b.sleep) continue;
         if (!b.freed) {
-          if (b.x < b.r) { b.x = b.r; if (b.vx < 0) b.vx = -b.vx * bounce(E_WALL, -b.vx); }
-          else if (b.x > W - b.r) { b.x = W - b.r; if (b.vx > 0) b.vx = -b.vx * bounce(E_WALL, b.vx); }
+          if (b.x < b.r) { b.x = b.r; if (b.vx < 0) { squish(b, 1, 0, -b.vx); b.vx = -b.vx * bounce(E_WALL, -b.vx); } }
+          else if (b.x > W - b.r) { b.x = W - b.r; if (b.vx > 0) { squish(b, 1, 0, b.vx); b.vx = -b.vx * bounce(E_WALL, b.vx); } }
         }
-        if (ceilOn && b.y < b.r) { b.y = b.r; if (b.vy < 0) b.vy = -b.vy * bounce(E_WALL, -b.vy); }
+        if (ceilOn && b.y < b.r) { b.y = b.r; if (b.vy < 0) { squish(b, 0, 1, -b.vy); b.vy = -b.vy * bounce(E_WALL, -b.vy); } }
         if (floorOn && b.y > H - b.r) {
           b.y = H - b.r;
           var jn = 0;
           if (b.vy > 0) {
+            squish(b, 0, 1, b.vy);
             var e = bounce(E_FLOOR, b.vy);
             if (b.bomb) {
               if (b.vy > BOMB_MIN_V && b.bounces < BOMB_BOUNCES) { e = BOMB_E; b.bounces++; }
@@ -175,11 +232,13 @@
     function step(h, el) {
       var k, m, b, it, dv, dw;
       simT += h;
+      bondForces(h);
       for (k = 0; k < balls.length; k++) {
         b = balls[k];
-        if (b.gone || b.sleep) continue;
+        if (b.gone) continue;
+        if (b.sleep) { if (!b.bomb) wob(b, h); continue; }
         if (!b.live) { if (el >= b.at) b.live = true; else continue; }
-        if (b.bomb) slosh(b, h);
+        if (b.bomb) slosh(b, h); else wob(b, h);
         b.vy += (b.bomb ? BOMB_GRAV : G) * h;
         b.vx *= 1 - 0.1 * h;
         b.w *= 1 - 0.1 * h;
@@ -320,6 +379,8 @@
       var at = bombs.indexOf(b);
       if (at >= 0) bombs.splice(at, 1);
       b.gone = true;
+      noBond = true;
+      while (bonds.length) dropBond(bonds.length - 1);
       calm = 0;
       ceilOn = true;
       if (!bombs.length) floorOn = false;
@@ -337,6 +398,10 @@
         if (sp > MAXB) { o.vx *= MAXB / sp; o.vy *= MAXB / sp; }
         o.w += (Math.random() - 0.5) * 20;
         o.freed = false;
+        o.ev += (Math.random() - 0.5) * 40;
+        o.fv += (Math.random() - 0.5) * 40;
+        o.vx += (Math.random() - 0.5) * 500;
+        o.vy -= Math.random() * 300;
       });
       fxs.push({ x: bx, y: by, t: now });
       if (navigator.vibrate) { try { navigator.vibrate(80); } catch (e) {} }
@@ -386,12 +451,20 @@
       ctx.restore();
     }
 
-    /* Dropped item: a red blood cell, a biconcave disc with a paler centre and a darker rim. */
+    /* Dropped item: a squishy red blood cell, a biconcave disc with a paler dimple and a darker rim.
+       (b.e, b.f) is its current stretch: it flattens on impact and wobbles back. */
     function draw(b) {
-      var r = b.r * 0.95, c = b.rc;
+      var r = b.r * 0.95, c = b.rc, m = Math.min(Math.hypot(b.e, b.f), SQ_MAX);
       ctx.save();
       ctx.translate(b.x, b.y);
-      ctx.rotate(b.a);
+      if (m > 0.004) {
+        var ph = 0.5 * Math.atan2(b.f, b.e), k = 1 + m * 0.9;
+        ctx.rotate(ph);
+        ctx.scale(k, 1 / k);
+        ctx.rotate(b.a - ph);
+      } else {
+        ctx.rotate(b.a);
+      }
       var g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
       g.addColorStop(0, c[0]);
       g.addColorStop(0.32, c[1]);
@@ -402,12 +475,12 @@
       ctx.arc(0, 0, r, 0, 6.2832);
       ctx.fill();
       ctx.lineWidth = 1.2;
-      ctx.strokeStyle = 'rgba(120,10,25,0.35)';
+      ctx.strokeStyle = 'rgba(40,0,8,0.45)';
       ctx.beginPath();
-      ctx.arc(0, 0, r * 0.52, 0, 6.2832);
+      ctx.arc(0, 0, r * 0.5, 0, 6.2832);
       ctx.stroke();
       ctx.lineWidth = Math.max(1.4, r * 0.09);
-      ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+      ctx.strokeStyle = 'rgba(255,170,180,0.3)';
       ctx.beginPath();
       ctx.arc(0, 0, r * 0.8, -2.6, -1.1);
       ctx.stroke();
