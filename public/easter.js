@@ -7,7 +7,7 @@
   var BOUNCE_MIN = 40, STEP = 1 / 240, ITER = 5, SLOP = 0.2, PUSH = 0.8;
   var REST_V = 50, REST_W = 40, ROLL_K = 4, ROLL_DEC = 280, SPIN_K = 4;
   var WAKE_V = 80, SWIPE_R = 16, MAX_V = 2200, MIN_SWIPE = 150;
-  var BTN_DELAY = 1000, DWELL = 0.5, BLAST = 3400, LIFT = 1200, MAXB = 3600;
+  var BTN_DELAY = 1000, DWELL = 1, BLAST = 3400, LIFT = 1200, MAXB = 3600;
   var BOMB_R = 26, BOMB_M = 60, BOMB_GRAV = 4500, BOMB_V = 500, SINK_S = 2, UPBIAS = 0.3;
   var BOMB_E = 0.2, BOMB_BOUNCES = 2, BOMB_MIN_V = 150;
   var PALETTE = ['#e63946', '#f4a261', '#f6c945', '#2a9d8f', '#3a86ff', '#8338ec', '#ff5fa2', '#ffffff', '#7bd88f', '#1d3557'];
@@ -39,7 +39,8 @@
     return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
   }
   function pickColors() {
-    var i = Math.floor(Math.random() * PALETTE.length), j;
+    var i, j;
+    do { i = Math.floor(Math.random() * PALETTE.length); } while (PALETTE[i] === '#ffffff');
     do { j = Math.floor(Math.random() * PALETTE.length); } while (j === i);
     return [PALETTE[i], PALETTE[j]];
   }
@@ -156,11 +157,12 @@
       }
     }
 
-    /* Fluid in the IV bag: a lightweight slosh model, not a full fluid simulation.
-       The surface stays level in the world while the bag tumbles. A spring-damper tilts it when the bag is pushed
-       sideways, and floor impacts start a decaying surface wave. */
+    /* Fluid slosh for vials and the syringe: a lightweight model, not a full fluid simulation.
+       The surface stays level in the world while the object tumbles. A spring-damper tilts it when the object is
+       pushed sideways, and impacts start a decaying surface wave. */
     function slosh(b, h) {
-      var dvx = b.vx - b.pvx, dvy = b.vy - b.pvy - BOMB_GRAV * h;
+      if (b.pvx === undefined) { b.pvx = b.vx; b.pvy = b.vy; b.s = 0; b.sv = 0; b.wa = 0; b.wp = Math.random() * 6; return; }
+      var dvx = b.vx - b.pvx, dvy = b.vy - b.pvy - (b.bomb ? BOMB_GRAV : G) * h;
       b.pvx = b.vx; b.pvy = b.vy;
       b.sv -= dvx * 0.02;
       if (dvy < -60) b.wa = Math.min(b.r * 0.3, b.wa + b.r * Math.min(0.25, -dvy / 7000));
@@ -176,9 +178,10 @@
       simT += h;
       for (k = 0; k < balls.length; k++) {
         b = balls[k];
-        if (b.gone || b.sleep) continue;
+        if (b.gone) continue;
+        if (b.sleep) { slosh(b, h); continue; }
         if (!b.live) { if (el >= b.at) b.live = true; else continue; }
-        if (b.bomb) slosh(b, h);
+        slosh(b, h);
         b.vy += (b.bomb ? BOMB_GRAV : G) * h;
         b.vx *= 1 - 0.1 * h;
         b.w *= 1 - 0.1 * h;
@@ -292,8 +295,8 @@
       for (i = 0; i < add; i++) {
         el = document.createElement('button');
         el.type = 'button';
-        el.textContent = 'TNT \uD83D\uDCA5';
-        el.setAttribute('aria-label', 'Drop an IV bag bomb');
+        el.textContent = 'Cathflo';
+        el.setAttribute('aria-label', 'Drop a Cathflo syringe bomb');
         el.style.cssText = 'padding:.6rem 1.05rem;border-radius:999px;border:2px solid #fff;background:#d92d20;color:#fff;font-family:inherit;font-weight:800;font-size:1rem;letter-spacing:.06em;box-shadow:0 6px 18px rgba(217,45,32,.5);cursor:pointer;touch-action:manipulation;pointer-events:auto';
         el.addEventListener('click', pressBtn.bind(null, el));
         box.appendChild(el);
@@ -308,10 +311,8 @@
       var b = {
         x: W * 0.2 + Math.random() * W * 0.6, y: -r - 10, vx: (Math.random() - 0.5) * 60, vy: BOMB_V,
         r: r, m: BOMB_M * r * r, a: 0, w: 0, at: 0, live: true, gone: false, floor: false, touch: false,
-        sleep: false, rest: 0, freed: false, bomb: true, hitAt: null, bounces: 0, born: simT, fuse: tFall + SINK_S,
-        s: 0, sv: 0, wa: 0, wp: 0, pvx: 0, pvy: BOMB_V
+        sleep: false, rest: 0, freed: false, bomb: true, hitAt: null, bounces: 0, born: simT, fuse: tFall + SINK_S
       };
-      b.pvx = b.vx;
       bombs.push(b);
       balls.push(b);
     }
@@ -343,44 +344,8 @@
       if (navigator.vibrate) { try { navigator.vibrate(80); } catch (e) {} }
     }
 
-    /* Pill: a capsule split down the middle, one colour per half. */
-    function capsulePath(hl, hw) {
-      ctx.beginPath();
-      ctx.moveTo(-hl + hw, -hw);
-      ctx.lineTo(hl - hw, -hw);
-      ctx.arc(hl - hw, 0, hw, -Math.PI / 2, Math.PI / 2);
-      ctx.lineTo(-hl + hw, hw);
-      ctx.arc(-hl + hw, 0, hw, Math.PI / 2, Math.PI * 1.5);
-      ctx.closePath();
-    }
-    function draw(b) {
-      var hl = b.r * 1.15, hw = b.r * 0.5;
-      ctx.save();
-      ctx.translate(b.x, b.y);
-      ctx.rotate(b.a);
-      capsulePath(hl, hw);
-      ctx.save();
-      ctx.clip();
-      ctx.fillStyle = b.c1;
-      ctx.fillRect(-hl, -hw, hl, hw * 2);
-      ctx.fillStyle = b.c2;
-      ctx.fillRect(0, -hw, hl, hw * 2);
-      ctx.fillStyle = 'rgba(255,255,255,0.35)';
-      ctx.fillRect(-hl, -hw * 0.75, hl * 2, hw * 0.3);
-      ctx.restore();
-      ctx.lineWidth = 1.4;
-      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-      capsulePath(hl, hw);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(0, -hw);
-      ctx.lineTo(0, hw);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    /* IV bag bomb: bag body, fluid, label, ticks, drip tube, and a fuse out of the top port. */
-    function bagPath(x0, y0, w, h, rad) {
+    /* Rounded rectangle path. */
+    function rrPath(x0, y0, w, h, rad) {
       ctx.beginPath();
       ctx.moveTo(x0 + rad, y0);
       ctx.lineTo(x0 + w - rad, y0);
@@ -393,71 +358,111 @@
       ctx.quadraticCurveTo(x0, y0, x0 + rad, y0);
       ctx.closePath();
     }
+
+    /* Liquid with a level surface in the world frame. Call inside a clip. (cx, cy) is the container centre,
+       w and h its size, frac how full it is, ws scales the surface wave. */
+    function drawFluid(b, cx, cy, w, h, frac, color, ws) {
+      var sa = b.s + b.a, dnx = Math.sin(sa), dny = Math.cos(sa), tnx = Math.cos(sa), tny = -Math.sin(sa);
+      var lev = (frac - 0.5) * h, span = Math.max(w, h) * 1.2, big = (w + h) * 2, nPts = 14, sx = [], sy = [], j;
+      for (j = 0; j <= nPts; j++) {
+        var u = -span + (2 * span * j) / nPts, wv = b.wa * ws * Math.sin((u / b.r) * 2.6 + b.wp);
+        sx.push(-dnx * (lev + wv) + tnx * u);
+        sy.push(-dny * (lev + wv) + tny * u);
+      }
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.beginPath();
+      ctx.moveTo(sx[0], sy[0]);
+      for (j = 1; j <= nPts; j++) ctx.lineTo(sx[j], sy[j]);
+      ctx.lineTo(sx[nPts] + dnx * big, sy[nPts] + dny * big);
+      ctx.lineTo(sx[0] + dnx * big, sy[0] + dny * big);
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(sx[0], sy[0]);
+      for (j = 1; j <= nPts; j++) ctx.lineTo(sx[j], sy[j]);
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    /* Dropped item: a clear glass vial with coloured liquid (b.c1) and a coloured cap (b.c2). */
+    function draw(b) {
+      var r = b.r, bw = r * 1.0, bh = r * 1.07, bx0 = -bw / 2, by0 = -r * 0.32;
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(b.a);
+      ctx.lineJoin = 'round';
+      rrPath(bx0, by0, bw, bh, r * 0.14);
+      ctx.fillStyle = 'rgba(205,230,240,0.28)';
+      ctx.fill();
+      ctx.save();
+      rrPath(bx0, by0, bw, bh, r * 0.14);
+      ctx.clip();
+      drawFluid(b, 0, by0 + bh / 2, bw, bh, 0.55, b.c1, 0.6);
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.fillRect(bx0 + bw * 0.14, by0 + bh * 0.08, bw * 0.14, bh * 0.84);
+      ctx.restore();
+      ctx.lineWidth = 1.3;
+      ctx.strokeStyle = 'rgba(70,100,115,0.85)';
+      rrPath(bx0, by0, bw, bh, r * 0.14);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(205,230,240,0.55)';
+      ctx.fillRect(-r * 0.22, -r * 0.52, r * 0.44, r * 0.24);
+      ctx.strokeRect(-r * 0.22, -r * 0.52, r * 0.44, r * 0.24);
+      ctx.fillStyle = b.c2;
+      rrPath(-r * 0.32, -r * 0.76, r * 0.64, r * 0.26, r * 0.06);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    /* Cathflo syringe bomb: glass barrel full of bright red liquid, plunger, hub, needle, and a fuse on the thumb pad. */
     function drawBomb(b) {
-      var r = b.r, bw = r * 1.3, bh = r * 1.6, x0 = -bw / 2, y0 = -bh / 2;
+      var r = b.r, bx0 = -r * 0.5, bw = r * 1.2, hh = r * 0.36, by0 = -hh, bh = hh * 2;
       ctx.save();
       ctx.translate(b.x, b.y);
       ctx.rotate(b.a);
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
-      ctx.strokeStyle = '#6b7a86';
-      ctx.lineWidth = Math.max(2, r * 0.12);
-      ctx.beginPath(); ctx.moveTo(0, bh / 2 - 1); ctx.lineTo(0, bh / 2 + r * 0.45); ctx.stroke();
-      ctx.fillStyle = '#9fb3c0';
-      ctx.fillRect(-r * 0.12, bh / 2 + r * 0.1, r * 0.24, r * 0.14);
-      bagPath(x0, y0, bw, bh, r * 0.28);
-      ctx.fillStyle = 'rgba(214,236,244,0.95)';
+      ctx.strokeStyle = '#9aa7b0';
+      ctx.lineWidth = Math.max(1.5, r * 0.06);
+      ctx.beginPath(); ctx.moveTo(r * 0.84, 0); ctx.lineTo(r * 1.3, 0); ctx.stroke();
+      ctx.fillStyle = '#c3ccd2';
+      ctx.fillRect(-r * 1.2, -r * 0.08, r * 0.72, r * 0.16);
+      ctx.fillRect(-r * 1.22, -r * 0.4, r * 0.12, r * 0.8);
+      rrPath(bx0, by0, bw, bh, r * 0.1);
+      ctx.fillStyle = 'rgba(214,236,244,0.55)';
       ctx.fill();
       ctx.save();
-      bagPath(x0, y0, bw, bh, r * 0.28);
+      rrPath(bx0, by0, bw, bh, r * 0.1);
       ctx.clip();
-      /* Fluid: bright red like doxorubicin. Surface is level in the world frame (rotate back by the bag angle). */
-      var sa = b.s + b.a, dnx = Math.sin(sa), dny = Math.cos(sa), tnx = Math.cos(sa), tny = -Math.sin(sa);
-      var lev = bh * 0.2, span = bw * 1.5, nPts = 14, sx = [], sy = [], j;
-      for (j = 0; j <= nPts; j++) {
-        var u = -span + (2 * span * j) / nPts, wv = b.wa * Math.sin((u / r) * 2.6 + b.wp);
-        sx.push(-dnx * (lev + wv) + tnx * u);
-        sy.push(-dny * (lev + wv) + tny * u);
-      }
-      ctx.beginPath();
-      ctx.moveTo(sx[0], sy[0]);
-      for (j = 1; j <= nPts; j++) ctx.lineTo(sx[j], sy[j]);
-      ctx.lineTo(sx[nPts] + dnx * bh * 2, sy[nPts] + dny * bh * 2);
-      ctx.lineTo(sx[0] + dnx * bh * 2, sy[0] + dny * bh * 2);
-      ctx.closePath();
-      ctx.fillStyle = '#e3112c';
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(sx[0], sy[0]);
-      for (j = 1; j <= nPts; j++) ctx.lineTo(sx[j], sy[j]);
-      ctx.strokeStyle = 'rgba(255,200,200,0.7)';
-      ctx.lineWidth = 1.3;
-      ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,0.4)';
-      ctx.fillRect(x0 + bw * 0.12, y0, bw * 0.12, bh);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(x0 + bw * 0.18, y0 + bh * 0.42, bw * 0.64, bh * 0.28);
-      ctx.fillStyle = '#d92d20';
-      ctx.font = '800 ' + Math.round(r * 0.46) + 'px system-ui,sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('TNT', 0, y0 + bh * 0.56);
-      ctx.strokeStyle = 'rgba(40,60,75,0.55)';
+      drawFluid(b, bx0 + bw / 2, 0, bw, bh, 0.82, '#e3112c', 0.5);
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      ctx.fillRect(bx0 + bw * 0.05, by0 + bh * 0.12, bw * 0.9, bh * 0.14);
+      ctx.fillStyle = '#4b5a64';
+      ctx.fillRect(bx0, by0, r * 0.12, bh);
+      ctx.strokeStyle = 'rgba(40,60,75,0.6)';
       ctx.lineWidth = 1;
-      for (var i = 0; i < 4; i++) {
-        var ty = y0 + bh * (0.34 + i * 0.16);
-        ctx.beginPath(); ctx.moveTo(x0 + bw, ty); ctx.lineTo(x0 + bw - r * (i % 2 ? 0.16 : 0.26), ty); ctx.stroke();
+      for (var i = 1; i < 6; i++) {
+        var tx = bx0 + (bw * i) / 6;
+        ctx.beginPath(); ctx.moveTo(tx, by0); ctx.lineTo(tx, by0 + r * (i % 2 ? 0.1 : 0.17)); ctx.stroke();
       }
       ctx.restore();
       ctx.strokeStyle = '#33505f';
       ctx.lineWidth = 1.6;
-      bagPath(x0, y0, bw, bh, r * 0.28);
+      rrPath(bx0, by0, bw, bh, r * 0.1);
       ctx.stroke();
-      ctx.fillStyle = '#33505f';
-      ctx.fillRect(-r * 0.16, y0 - r * 0.14, r * 0.32, r * 0.16);
+      ctx.fillStyle = '#e8eef2';
+      ctx.fillRect(bx0 - r * 0.06, -r * 0.52, r * 0.1, r * 1.04);
+      ctx.strokeRect(bx0 - r * 0.06, -r * 0.52, r * 0.1, r * 1.04);
+      ctx.fillStyle = '#3a86ff';
+      ctx.fillRect(bx0 + bw, -r * 0.15, r * 0.16, r * 0.3);
       var burn = Math.min(1, (simT - b.born) / b.fuse);
       if (b.hitAt !== null) burn = Math.max(burn, 0.6 + 0.4 * Math.min(1, (simT - b.hitAt) / DWELL));
-      var len = 1 - burn, fx0 = 0, fy0 = y0 - r * 0.14;
+      var len = 1 - burn, fx0 = -r * 1.16, fy0 = -r * 0.4;
       var ex = fx0 + r * 0.5 * len, ey = fy0 - r * 0.9 * len;
       ctx.strokeStyle = '#c9a66b';
       ctx.lineWidth = Math.max(2, r * 0.12);
