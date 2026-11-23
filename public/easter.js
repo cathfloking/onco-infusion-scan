@@ -10,7 +10,12 @@
   var BTN_DELAY = 1000, DWELL = 1, BLAST = 3400, LIFT = 1200, MAXB = 3600;
   var BOMB_R = 26, BOMB_M = 60, BOMB_GRAV = 4500, BOMB_V = 500, SINK_S = 2, UPBIAS = 0.3;
   var BOMB_E = 0.2, BOMB_BOUNCES = 2, BOMB_MIN_V = 150;
-  var PALETTE = ['#e63946', '#f4a261', '#f6c945', '#2a9d8f', '#3a86ff', '#8338ec', '#ff5fa2', '#ffffff', '#7bd88f', '#1d3557'];
+  var RBC = [
+    ['#f19aa1', '#e2505c', '#c8202f', '#8f1220'],
+    ['#f4a3a8', '#e5606a', '#d02a38', '#98162a'],
+    ['#ee8c94', '#d9404e', '#b81c2c', '#82101e'],
+    ['#f7b0b4', '#ea6c75', '#d83a46', '#a01a2c']
+  ];
   var taps = [], running = false, show = null;
 
   /* The middle dock button in OncoScan is the Scan tab. */
@@ -38,12 +43,6 @@
     t = Math.max(0, Math.min(1, t));
     return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
   }
-  function pickColors() {
-    var i, j;
-    do { i = Math.floor(Math.random() * PALETTE.length); } while (PALETTE[i] === '#ffffff');
-    do { j = Math.floor(Math.random() * PALETTE.length); } while (j === i);
-    return [PALETTE[i], PALETTE[j]];
-  }
 
   function start() {
     if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -65,13 +64,13 @@
 
     function spawnSet(base) {
       for (var i = 0; i < COUNT; i++) {
-        var r = 13 + Math.random() * 8, cc = pickColors();
+        var r = 13 + Math.random() * 8;
         balls.push({
           x: r + Math.random() * Math.max(1, W - 2 * r), y: -r - Math.random() * 60,
           vx: (Math.random() - 0.5) * 240, vy: Math.random() * 200,
           r: r, m: r * r, a: Math.random() * 6.28, w: (Math.random() - 0.5) * 6,
           at: base + (i * SPAWN) / COUNT + Math.random() * 40,
-          c1: cc[0], c2: cc[1],
+          rc: RBC[Math.floor(Math.random() * RBC.length)],
           live: false, gone: false, floor: false, touch: false, sleep: false, rest: 0, freed: false, bomb: false
         });
       }
@@ -157,12 +156,12 @@
       }
     }
 
-    /* Fluid slosh for vials and the syringe: a lightweight model, not a full fluid simulation.
-       The surface stays level in the world while the object tumbles. A spring-damper tilts it when the object is
+    /* Fluid slosh for the syringe: a lightweight model, not a full fluid simulation.
+       The surface stays level in the world while the syringe tumbles. A spring-damper tilts it when the syringe is
        pushed sideways, and impacts start a decaying surface wave. */
     function slosh(b, h) {
       if (b.pvx === undefined) { b.pvx = b.vx; b.pvy = b.vy; b.s = 0; b.sv = 0; b.wa = 0; b.wp = Math.random() * 6; return; }
-      var dvx = b.vx - b.pvx, dvy = b.vy - b.pvy - (b.bomb ? BOMB_GRAV : G) * h;
+      var dvx = b.vx - b.pvx, dvy = b.vy - b.pvy - BOMB_GRAV * h;
       b.pvx = b.vx; b.pvy = b.vy;
       b.sv -= dvx * 0.02;
       if (dvy < -60) b.wa = Math.min(b.r * 0.3, b.wa + b.r * Math.min(0.25, -dvy / 7000));
@@ -178,10 +177,9 @@
       simT += h;
       for (k = 0; k < balls.length; k++) {
         b = balls[k];
-        if (b.gone) continue;
-        if (b.sleep) { slosh(b, h); continue; }
+        if (b.gone || b.sleep) continue;
         if (!b.live) { if (el >= b.at) b.live = true; else continue; }
-        slosh(b, h);
+        if (b.bomb) slosh(b, h);
         b.vy += (b.bomb ? BOMB_GRAV : G) * h;
         b.vx *= 1 - 0.1 * h;
         b.w *= 1 - 0.1 * h;
@@ -388,33 +386,30 @@
       ctx.restore();
     }
 
-    /* Dropped item: a clear glass vial with coloured liquid (b.c1) and a coloured cap (b.c2). */
+    /* Dropped item: a red blood cell, a biconcave disc with a paler centre and a darker rim. */
     function draw(b) {
-      var r = b.r, bw = r * 1.0, bh = r * 1.07, bx0 = -bw / 2, by0 = -r * 0.32;
+      var r = b.r * 0.95, c = b.rc;
       ctx.save();
       ctx.translate(b.x, b.y);
       ctx.rotate(b.a);
-      ctx.lineJoin = 'round';
-      rrPath(bx0, by0, bw, bh, r * 0.14);
-      ctx.fillStyle = 'rgba(205,230,240,0.28)';
+      var g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+      g.addColorStop(0, c[0]);
+      g.addColorStop(0.32, c[1]);
+      g.addColorStop(0.7, c[2]);
+      g.addColorStop(1, c[3]);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, 6.2832);
       ctx.fill();
-      ctx.save();
-      rrPath(bx0, by0, bw, bh, r * 0.14);
-      ctx.clip();
-      drawFluid(b, 0, by0 + bh / 2, bw, bh, 0.55, b.c1, 0.6);
-      ctx.fillStyle = 'rgba(255,255,255,0.5)';
-      ctx.fillRect(bx0 + bw * 0.14, by0 + bh * 0.08, bw * 0.14, bh * 0.84);
-      ctx.restore();
-      ctx.lineWidth = 1.3;
-      ctx.strokeStyle = 'rgba(70,100,115,0.85)';
-      rrPath(bx0, by0, bw, bh, r * 0.14);
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = 'rgba(120,10,25,0.35)';
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 0.52, 0, 6.2832);
       ctx.stroke();
-      ctx.fillStyle = 'rgba(205,230,240,0.55)';
-      ctx.fillRect(-r * 0.22, -r * 0.52, r * 0.44, r * 0.24);
-      ctx.strokeRect(-r * 0.22, -r * 0.52, r * 0.44, r * 0.24);
-      ctx.fillStyle = b.c2;
-      rrPath(-r * 0.32, -r * 0.76, r * 0.64, r * 0.26, r * 0.06);
-      ctx.fill();
+      ctx.lineWidth = Math.max(1.4, r * 0.09);
+      ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 0.8, -2.6, -1.1);
       ctx.stroke();
       ctx.restore();
     }
